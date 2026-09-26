@@ -1,115 +1,96 @@
 """
-Agent API Gateway — FastAPI application.
+API Gateway — main FastAPI application.
 
-Phase 1 skeleton:
-  - JWT authentication (login / register)
-  - RBAC on all protected endpoints
-  - Audit logging middleware (agent_actions)
-  - Proxy routers to downstream services
-  - WebSocket scaffold
+Mounts:
+  /forecasting  — forecasting router (risk, alerts, approvals, pre-mortems, policy)
+  /audit        — audit router (agent_actions log)
+  /ws/alerts    — WebSocket real-time alert stream
+  /auth/token   — issue JWT tokens (dev/test helper)
+  /health       — liveness check
 """
+
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
-import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.config import settings
-from app.middleware import AuditLoggingMiddleware
-from app.routers.auth import router as auth_router
-from app.routers.ingestion import router as ingestion_router
+from app.routers.forecasting import router as forecasting_router
+from app.websocket.alerts_ws import ws_endpoint, redis_broadcast_listener
+from shared.config import get_settings
 
-log = structlog.get_logger()
+settings = get_settings()
 
-# ---------------------------------------------------------------------------
-# DB engine
-# ---------------------------------------------------------------------------
-_engine = create_async_engine(
-    settings.database_url,
-    pool_size=settings.database_pool_size,
-    max_overflow=settings.database_max_overflow,
-)
-_SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
-    _engine, expire_on_commit=False
-)
-
-
-async def get_db() -> AsyncSession:  # type: ignore[return]
-    async with _SessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-# ---------------------------------------------------------------------------
-# App lifecycle
-# ---------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Make DB factory available to middleware
-    app.state.db_factory = _SessionLocal
-    log.info("api_gateway.startup", service=settings.service_name)
+    task = asyncio.create_task(redis_broadcast_listener())
     yield
-    await _engine.dispose()
-    log.info("api_gateway.shutdown")
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
-
-# ---------------------------------------------------------------------------
-# Application
-# ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="LogPilot Agent API",
-    description=(
-        "Phase 1 — Cloud Foundation & Data Ingestion Pipeline.\n\n"
-        "All endpoints are RBAC-protected. Every action is audit-logged. "
-        "PII redaction is enforced at the ingestion layer before storage."
-    ),
-    version="0.1.0",
+    title="LogPilot API Gateway",
+    version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# CORS — tighten in production to specific origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],   # tighten in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Audit logging — every request by authenticated users
-app.add_middleware(AuditLoggingMiddleware)
+app.include_router(forecasting_router)
 
-# Override DB dependency for routers
-app.dependency_overrides[get_db] = get_db  # type: ignore[assignment]
-
-# ---------------------------------------------------------------------------
-# Routers
-# ---------------------------------------------------------------------------
-
-app.include_router(auth_router)
-app.include_router(ingestion_router)
+# Import audit router from audit-service directly (same process in monorepo dev mode)
+try:
+    from services.audit_service.app.handlers.audit_router import router as audit_router
+    app.include_router(audit_router)
+except ImportError:
+    pass   # audit-service runs as a separate container in production
 
 
-# ---------------------------------------------------------------------------
-# Health
-# ---------------------------------------------------------------------------
+# WebSocket endpoint
+app.add_api_websocket_route("/ws/alerts", ws_endpoint)
 
-@app.get("/health", tags=["ops"])
+
+# ── Dev helper: issue a JWT token ─────────────────────────────────────────────
+from fastapi import APIRouter
+from app.auth.jwt_auth import create_access_token, TokenResponse
+from pydantic import BaseModel
+
+_auth_router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+class TokenRequest(BaseModel):
+    username: str
+    role: str = "developer"
+
+
+@_auth_router.post("/token", response_model=TokenResponse)
+async def issue_token(body: TokenRequest):
+    """
+    Development-only token endpoint.
+    In production this is replaced by your SSO / identity provider.
+    """
+    token = create_access_token(subject=body.username, role=body.role)
+    return TokenResponse(access_token=token)
+
+
+app.include_router(_auth_router)
+
+
+@app.get("/health")
 async def health():
-    return {
-        "status": "ok",
-        "service": settings.service_name,
-        "version": "0.1.0",
-        "phase": "1",
-    }
+    return {"status": "ok", "service": "api-gateway"}

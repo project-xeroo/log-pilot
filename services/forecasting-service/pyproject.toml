@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "logpilot-forecasting"
+version = "1.0.0"
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "celery[redis]>=5.3",
+    "redis>=5.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "pgvector>=0.2",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "logpilot-shared",
+]
