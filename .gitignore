@@ -1,0 +1,160 @@
+# ============================================================
+# LogPilot .gitignore
+# ============================================================
+
+# -- Secrets & environment -----------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# -- Python --------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+.installed.cfg
+lib/
+lib64/
+MANIFEST
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.coveragerc
+nosetests.xml
+test-results/
+junit.xml
+
+# mypy / pyright
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyright/
+pyrightconfig.json
+
+# ruff / black / isort
+.ruff_cache/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# -- Node / Frontend -----------------------------------------
+node_modules/
+.npm
+.yarn/
+.pnp.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.next/
+.nuxt/
+.vite/
+*.local
+
+# -- Databases & storage (local volumes) ---------------------
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+minio_data/
+redis_data/
+
+# -- Logs ----------------------------------------------------
+*.log
+logs/
+*.log.*
+
+# -- OS generated --------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# -- IDEs ----------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+.project
+.classpath
+.settings/
+
+# -- Terraform -----------------------------------------------
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# -- Kubernetes secrets --------------------------------------
+**/secrets.yaml
+**/secret.yaml
+**/sealed-secrets.yaml
+
+# -- Bob (IBM Bob AI assistant) ------------------------------
+.bob/
+
+# -- Temporary / scratch -------------------------------------
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+*.rej
+scratch/
+
+# -- Build artifacts -----------------------------------------
+*.pyc
+*.pyo
+*.pyd
+.build/
+
+# -- Microsoft Office lock files -----------------------------
+~$*.docx
+~$*.xlsx
+~$*.pptx
