@@ -15,6 +15,7 @@ Throughput target: > 10,000 records/minute
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from dataclasses import asdict
 from typing import Any
@@ -153,6 +154,10 @@ def process_log_session(self: Task, session_id: str, storage_key: str) -> dict:
 
             db.commit()
 
+            # Step 6 — Phase 2: enqueue embedding generation (fire-and-forget)
+            # Runs after commit so records are visible to the embedding task.
+            _enqueue_embeddings(session_id)
+
             return {
                 "session_id": session_id,
                 "status": "completed",
@@ -200,7 +205,7 @@ def _record_to_row(record, session_id: uuid.UUID, pii_redacted: bool) -> dict:
         "duration_ms": record.duration_ms,
         "log_format": record.log_format or "unknown",
         "raw_line": record.raw_line if not pii_redacted else None,
-        "extra_fields": record.extra_fields or {},
+        "extra_fields": json.dumps(record.extra_fields or {}, default=str),
         "pii_was_redacted": pii_redacted,
         "is_malformed": record.is_malformed,
     }
@@ -223,10 +228,10 @@ def _bulk_insert(db: Session, rows: list[dict]) -> int:
                     source_ip, http_method, http_path, http_status, duration_ms,
                     log_format, raw_line, extra_fields, pii_was_redacted, is_malformed
                 ) VALUES (
-                    :session_id, :timestamp, :service_name, :severity::severitylevel, :message,
+                    :session_id, :timestamp, :service_name, CAST(:severity AS severitylevel), :message,
                     :request_id, :trace_id, :environment, :deployment_version,
                     :source_ip, :http_method, :http_path, :http_status, :duration_ms,
-                    :log_format::logformat, :raw_line, :extra_fields::jsonb, :pii_was_redacted, :is_malformed
+                    CAST(:log_format AS logformat), :raw_line, CAST(:extra_fields AS jsonb), :pii_was_redacted, :is_malformed
                 )
             """),
             batch,
@@ -249,7 +254,7 @@ def _update_session_status(
     sets = ["status = :status"]
     params: dict[str, Any] = {"status": status, "session_id": str(session_id)}
     if detected_format is not None:
-        sets.append("detected_format = :detected_format::logformat")
+        sets.append("detected_format = CAST(:detected_format AS logformat)")
         params["detected_format"] = detected_format
     if total_lines is not None:
         sets.append("total_lines = :total_lines")
@@ -267,7 +272,7 @@ def _update_session_status(
         sets.append("error_message = :error_message")
         params["error_message"] = error_message
     db.execute(
-        text(f"UPDATE log_sessions SET {', '.join(sets)} WHERE id = :session_id::uuid"),
+        text(f"UPDATE log_sessions SET {', '.join(sets)} WHERE id = CAST(:session_id AS uuid)"),
         params,
     )
 
@@ -288,8 +293,8 @@ def _write_audit(
                 tool_name, trigger, autonomy_tier, session_id,
                 input_summary, output_summary, status, error
             ) VALUES (
-                :tool_name, :trigger, 'autonomous'::autonomytier,
-                :session_id::uuid,
+                :tool_name, :trigger, 'autonomous',
+                CAST(:session_id AS uuid),
                 :input_summary, :output_summary, :status, :error
             )
         """),
@@ -303,3 +308,21 @@ def _write_audit(
             "error": error,
         },
     )
+
+
+def _enqueue_embeddings(session_id: str) -> None:
+    """
+    Enqueue the Phase 2 embedding generation task for a completed session.
+    Fire-and-forget: ingestion pipeline is not affected if this fails.
+    """
+    try:
+        from app.embeddings import generate_embeddings_for_session
+        generate_embeddings_for_session.apply_async(
+            args=[session_id],
+            countdown=2,   # brief delay so the commit is fully visible
+            queue="embeddings",
+        )
+        log.info("embeddings.enqueued", session_id=session_id)
+    except Exception as exc:
+        # Never let embedding scheduling break the ingestion result
+        log.warning("embeddings.enqueue_failed", session_id=session_id, error=str(exc))

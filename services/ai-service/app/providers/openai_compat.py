@@ -1,61 +1,39 @@
 """
-OpenAI-compatible provider.
+OpenAI-compatible provider for the deep-reasoning tools (RCA, reports, pre-mortems).
 
 Works with any provider that exposes an OpenAI-compatible REST API
-(OpenAI, Azure OpenAI, Together, Groq, local vLLM, etc.).
+(OpenAI, Azure OpenAI, Together, Groq, local vLLM, etc.). It shares the
+client, credentials, and retry policy of the chat/search layer in
+``providers.cloud`` and uses the deep reasoning model (PRD §6.1).
 Configure via environment variables:
-  AI_PROVIDER=openai
-  AI_API_KEY=sk-...
-  AI_BASE_URL=https://api.openai.com/v1   (or your endpoint)
-  AI_MODEL_REASONING=gpt-4o
-  AI_MODEL_EMBEDDING=text-embedding-3-small
+  OPENAI_API_KEY / OPENAI_BASE_URL   (AI_API_KEY / AI_BASE_URL also accepted)
+  REASONING_MODEL=gpt-4o
+  EMBEDDING_MODEL=text-embedding-3-small
 """
 
 from __future__ import annotations
 
+from app.config import settings
 from .base import BaseLLMProvider, LLMResponse
-from shared.config import get_settings
+from .cloud import ChatProvider, EmbeddingProvider
 
 
 class OpenAICompatibleProvider(BaseLLMProvider):
 
     def __init__(self):
-        self._settings = get_settings()
+        self._chat = ChatProvider(model=settings.reasoning_model)
+        self._embedder = EmbeddingProvider()
 
     @property
     def name(self) -> str:
         return "openai-compatible"
 
     async def complete(self, prompt: str, *, max_tokens: int = 1024) -> LLMResponse:
-        import httpx
-        s = self._settings
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{s.ai_base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {s.ai_api_key}"},
-                json={
-                    "model": s.ai_model_reasoning,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return LLMResponse(
-                content=data["choices"][0]["message"]["content"],
-                model=data.get("model", s.ai_model_reasoning),
-                provider="openai-compatible",
-                tokens_used=data.get("usage", {}).get("total_tokens"),
-            )
+        content = await self._chat.complete(
+            [{"role": "user", "content": prompt}],
+            max_tokens=min(max_tokens, settings.reasoning_max_tokens),
+        )
+        return LLMResponse(content=content, model=self._chat.model, provider=self.name)
 
     async def embed(self, text: str) -> list[float]:
-        import httpx
-        s = self._settings
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                f"{s.ai_base_url}/embeddings",
-                headers={"Authorization": f"Bearer {s.ai_api_key}"},
-                json={"model": s.ai_model_embedding, "input": text},
-            )
-            resp.raise_for_status()
-            return resp.json()["data"][0]["embedding"]
+        return await self._embedder.embed_one(text)

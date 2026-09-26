@@ -5,15 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "logpilot-shared"
 version = "1.0.0"
-description = "Shared models, config, and utilities for LogPilot microservices"
+description = "Shared models, config, and utilities for LogPilot services"
 requires-python = ">=3.11"
-
 dependencies = [
     "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
     "asyncpg>=0.29",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
-    "pgvector>=0.2",
+    "redis>=5.0",   # Agent Feed publisher (shared.utils.feed)
 ]
 
 [project.optional-dependencies]

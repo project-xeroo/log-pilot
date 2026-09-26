@@ -17,9 +17,9 @@ DBSession = Annotated[Session, Depends(get_session)]
 
 
 class UserOut(BaseModel):
-    id: str
+    id: uuid.UUID
     email: str
-    full_name: str
+    full_name: str | None
     role: str
     is_active: bool
 
@@ -64,7 +64,7 @@ def update_user(user_id: str, body: UserUpdate, session: DBSession):
         raise HTTPException(status_code=404, detail="User not found")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(user, field, value)
-    session.flush()
+    session.commit()  # commit before responding so follow-up reads see it
     return UserOut.model_validate(user)
 
 
@@ -74,3 +74,4 @@ def delete_user(user_id: str, session: DBSession):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     session.delete(user)
+    session.commit()

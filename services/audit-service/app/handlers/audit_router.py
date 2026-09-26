@@ -34,7 +34,7 @@ class AgentActionOut(BaseModel):
     confidence: float | None
     autonomy_tier: str
     approver: str | None
-    description: str
+    description: str | None
     reversed: bool
     reversed_by: str | None
     reversed_at: datetime | None

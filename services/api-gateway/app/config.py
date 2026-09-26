@@ -1,6 +1,7 @@
 """API Gateway configuration."""
 from __future__ import annotations
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,17 +16,21 @@ class Settings(BaseSettings):
     database_pool_size: int = 10
     database_max_overflow: int = 20
 
-    # JWT
-    jwt_secret_key: str = "change-me-in-production"
+    # JWT (JWT_SECRET_KEY accepted for older .env files)
+    jwt_secret: str = Field(
+        "change-me-in-production",
+        validation_alias=AliasChoices("JWT_SECRET", "JWT_SECRET_KEY"),
+    )
     jwt_algorithm: str = "HS256"
-    jwt_expiry_minutes: int = 60
+    jwt_expiry_seconds: int = 3600
 
     # Downstream service URLs
     ingestion_service_url: str = "http://log-ingestion-service:8001"
     ai_service_url: str = "http://ai-service:8002"
     forecasting_service_url: str = "http://forecasting-service:8003"
+    audit_service_url: str = "http://audit-service:8005"
 
-    # Redis
+    # Redis (real-time event bus for the WebSocket)
     redis_url: str = "redis://redis:6379/0"
 
     # CORS

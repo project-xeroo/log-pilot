@@ -1,109 +1,67 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { login } from "@/api";
-import { useAuthStore } from "@/store/auth";
-import { getMe } from "@/api";
-import toast from "react-hot-toast";
-import { AlertTriangle } from "lucide-react";
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/store/authStore'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const navigate = useNavigate();
+  const login = useAuthStore((s) => s.login)
+  const navigate = useNavigate()
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: () => login(email, password),
-    onSuccess: async (token) => {
-      // Temporarily store the token so getMe() can use it
-      useAuthStore.setState({ token: token.access_token, role: token.role });
-      const user = await getMe();
-      setAuth(token.access_token, user);
-      toast.success(`Welcome, ${user.full_name}`);
-      navigate("/reports");
-    },
-    onError: () => toast.error("Invalid email or password"),
-  });
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      await login(email, password)
+      navigate('/feed')
+    } catch {
+      setError('Invalid email or password.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "var(--bg)",
-      }}
-    >
-      <div
-        style={{
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: 10,
-          padding: "40px 48px",
-          width: 380,
-        }}
-      >
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <AlertTriangle size={32} color="var(--accent)" />
-          <h1 style={{ margin: "12px 0 4px", fontSize: 22 }}>LogPilot</h1>
-          <p style={{ color: "var(--text-muted)", margin: 0, fontSize: 13 }}>
-            Sign in to your workspace
-          </p>
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            mutate();
-          }}
-        >
-          <label style={{ display: "block", marginBottom: 16 }}>
-            <span style={{ fontSize: 13, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
-              Email
-            </span>
+    <div className="min-h-screen flex items-center justify-center bg-surface">
+      <div className="w-full max-w-sm card shadow-sm">
+        <h1 className="text-lg font-semibold mb-6">Sign in to LogPilot</h1>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Email</label>
             <input
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
+              className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
               required
             />
-          </label>
-
-          <label style={{ display: "block", marginBottom: 24 }}>
-            <span style={{ fontSize: 13, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
-              Password
-            </span>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Password</label>
             <input
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
               required
             />
-          </label>
-
+          </div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
           <button
             type="submit"
-            disabled={isPending}
-            style={{
-              width: "100%",
-              padding: "10px",
-              background: "var(--accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "var(--radius)",
-              fontSize: 14,
-              fontWeight: 600,
-              opacity: isPending ? 0.7 : 1,
-            }}
+            disabled={loading}
+            className="w-full bg-accent text-white rounded-md py-2 text-sm font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
           >
-            {isPending ? "Signing in…" : "Sign in"}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
       </div>
     </div>
-  );
+  )
 }

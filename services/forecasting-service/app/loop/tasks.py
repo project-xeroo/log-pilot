@@ -43,6 +43,7 @@ from app.drift import compute_drift_score
 from app.indicators import find_similar_incidents
 from app.scoring import compute_risk_score
 from app.loop.autonomy import resolve_autonomy_tier, record_action
+from shared.utils.feed import publish_feed_entry, record_feed_entry
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -206,10 +207,29 @@ async def _run_cycle(service: MonitoredService, db: AsyncSession) -> None:
         from app.loop.premortem_trigger import maybe_draft_premortem
         await maybe_draft_premortem(db, service=service, alert=alert, ai_assisted=ai_assisted)
 
+    # Surface the alert in the Agent Feed history (savepoint: never block the alert)
+    feed_entry = None
+    try:
+        async with db.begin_nested():
+            feed_entry = await record_feed_entry(
+                db,
+                entry_type="alert_fired",
+                title=f"{service.name}: {risk.risk_tier} failure risk ({risk.risk_score:.0f}/100)",
+                body=explanation,
+                service_name=service.name,
+                severity=risk.risk_tier,
+                risk_score=risk.risk_score,
+                metadata={"alert_id": str(alert.id)},
+            )
+    except Exception as exc:
+        logger.warning("Failed to record alert in agent feed: %s", exc)
+
     await db.commit()
 
-    # ── 9. Publish to notification service ───────────────────────────────────
+    # ── 9. Publish to notification service + live Agent Feed ─────────────────
     _publish_alert(alert_id=str(alert.id), service_name=service.name, risk_tier=risk.risk_tier)
+    if feed_entry:
+        publish_feed_entry(settings.redis_url, feed_entry)
 
 
 def _default_recommended_actions(tier: str) -> list[dict]:

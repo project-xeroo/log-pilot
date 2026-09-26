@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/.env
+*.docx
+**/tests
+**/.gitkeep
+**/README.md
+frontend/.env*

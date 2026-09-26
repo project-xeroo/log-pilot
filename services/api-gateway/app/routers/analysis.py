@@ -22,6 +22,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, desc
@@ -37,6 +38,21 @@ from shared.models import (
     DeploymentRegression,
 )
 from app.auth.jwt_auth import AnyAuthenticated, SREOrAdmin, TokenPayload
+from app.config import settings
+
+
+async def _call_ai_service(path: str, payload: dict[str, Any], *, timeout: float) -> Any:
+    """POST to the ai-service, which hosts the model-backed analysis tools."""
+    try:
+        async with httpx.AsyncClient(base_url=settings.ai_service_url, timeout=timeout) as client:
+            resp = await client.post(path, json=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"AI service unavailable: {exc}") from exc
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail=resp.json().get("detail", "Not found"))
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"AI service error: {resp.text[:200]}")
+    return resp.json()
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -373,14 +389,8 @@ async def run_rca(
     Runs temporal correlation + service dependency inference + deep reasoning model.
     Performance target: < 15 seconds.
     """
-    from services.ai_service.app.rca import run_rca as _run_rca  # type: ignore[import]
-    try:
-        result = await _run_rca(db, service_id, window_minutes=body.window_minutes)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    from dataclasses import asdict
-    d = asdict(result)
-    return RCAOut(**d)
+    data = await _call_ai_service(f"/analysis/rca/{service_id}", body.model_dump(mode="json"), timeout=30.0)
+    return RCAOut(**data)
 
 
 # ── Deployment regressions ────────────────────────────────────────────────────
@@ -453,18 +463,9 @@ async def compare_deployments(
     Manually trigger a deployment comparison between two versions.
     Returns any detected regressions.
     """
-    from services.ai_service.app.deployment import compare_deployments as _compare  # type: ignore[import]
-    try:
-        regressions = await _compare(
-            db,
-            service_id=body.service_id,
-            baseline_version=body.baseline_version,
-            head_version=body.head_version,
-            baseline_deployed_at=body.baseline_deployed_at,
-            head_deployed_at=body.head_deployed_at,
-            window_hours=body.window_hours,
-        )
-        await db.commit()
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    return regressions
+    data = await _call_ai_service("/analysis/compare", body.model_dump(mode="json"), timeout=60.0)
+    ids = [uuid.UUID(i) for i in data.get("regression_ids", [])]
+    if not ids:
+        return []
+    result = await db.execute(select(DeploymentRegression).where(DeploymentRegression.id.in_(ids)))
+    return result.scalars().all()

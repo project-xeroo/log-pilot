@@ -27,11 +27,11 @@ from typing import Iterator
 
 import structlog
 
-from app.parsers.models import ParsedRecord
-from app.parsers.apache import try_parse_apache_combined, try_parse_apache_common
-from app.parsers.nginx import try_parse_nginx
-from app.parsers.syslog import try_parse_rfc5424, try_parse_rfc3164
-from app.parsers.json_parser import try_parse_json
+from .models import ParsedRecord
+from .apache import try_parse_apache_combined, try_parse_apache_common
+from .nginx import try_parse_nginx
+from .syslog import try_parse_rfc5424, try_parse_rfc3164
+from .json_parser import try_parse_json
 
 log = structlog.get_logger()
 

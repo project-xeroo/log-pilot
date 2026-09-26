@@ -1,13 +1,22 @@
 FROM python:3.11-slim
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app
+
 WORKDIR /app
 
-COPY pyproject.toml .
-COPY app/ ./app/
+COPY shared/ /app/shared/
+RUN pip install /app/shared/
 
-RUN pip install --no-cache-dir .
+COPY services/forecasting-service/ /app/service/
+RUN pip install /app/service/
 
-ENV PYTHONUNBUFFERED=1
+WORKDIR /app/service
 
-EXPOSE 8002
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
+# Same image runs the Celery worker and beat (see docker-compose.yml)
+EXPOSE 8003
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]

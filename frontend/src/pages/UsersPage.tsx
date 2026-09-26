@@ -5,10 +5,14 @@ import type { User, Role } from "@/types";
 import toast from "react-hot-toast";
 import { Shield, Check, X } from "lucide-react";
 
+const ROLES: Role[] = ["admin", "sre", "developer", "manager", "junior", "viewer"];
+
 const ROLE_COLORS: Record<Role, string> = {
   admin: "#8b5cf6",
   sre: "#3b82d4",
   developer: "#3fb950",
+  manager: "#d4a72c",
+  junior: "#1f9eb3",
   viewer: "#8b949e",
 };
 
@@ -37,7 +41,7 @@ export default function UsersPage() {
   function startEdit(user: User) {
     setEditingId(user.id);
     setEditRole(user.role);
-    setEditActive(user.is_active);
+    setEditActive(user.is_active ?? true);
   }
 
   return (
@@ -47,7 +51,7 @@ export default function UsersPage() {
           <Shield size={20} color="var(--purple)" /> User Management
         </h1>
         <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
-          Manage roles and access for Admin, Developer, SRE, and Viewer accounts.
+          Manage roles and access. Promote Junior Engineer accounts out of guided mode here.
         </p>
       </div>
 
@@ -85,10 +89,9 @@ export default function UsersPage() {
                           onChange={(e) => setEditRole(e.target.value as Role)}
                           style={{ width: 130 }}
                         >
-                          <option value="admin">admin</option>
-                          <option value="sre">sre</option>
-                          <option value="developer">developer</option>
-                          <option value="viewer">viewer</option>
+                          {ROLES.map((r) => (
+                            <option key={r} value={r}>{r}</option>
+                          ))}
                         </select>
                       ) : (
                         <span

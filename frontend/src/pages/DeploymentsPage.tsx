@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listDeployments, compareDeployments } from "@/api";
-import type { DeploymentSnapshot, DeploymentComparison } from "@/types";
-import { GitCompare, ArrowRight } from "lucide-react";
+import type { DeploymentSnapshot } from "@/types";
+import { GitCompare } from "lucide-react";
 
 function DiffRow({ k, base, head }: { k: string; base: unknown; head: unknown }) {
   return (

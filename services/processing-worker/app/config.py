@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     service_name: str = "processing-worker"
 
     # Database — sync URL for Celery tasks (psycopg2)
-    database_url_sync: str = "postgresql://logpilot:logpilot@localhost:5432/logpilot"
+    database_url_sync: str = "postgresql+psycopg2://logpilot:logpilot@localhost:5432/logpilot"
     # Async URL for async helpers
     database_url: str = "postgresql+asyncpg://logpilot:logpilot@localhost:5432/logpilot"
 
@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     storage_access_key_id: str = ""
     storage_secret_access_key: str = ""
     storage_region: str = "us-east-1"
+
+    # ── Phase 2: Cloud AI provider ───────────────────────────────────────────
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+    embedding_batch_size: int = 256      # records per API call
+    provider_max_retries: int = 3
+    provider_retry_wait_seconds: float = 1.0
+    provider_timeout_seconds: float = 30.0
 
 
 settings = Settings()

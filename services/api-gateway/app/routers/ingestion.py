@@ -11,14 +11,16 @@ import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, status
 
-from app.auth import get_current_user, require_role, TokenPayload
+from app.auth import TokenPayload, permission_checker
+from shared.models import Permission
 from app.config import settings
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/ingest", tags=["ingestion"])
 
 # All ingestion endpoints require at minimum developer role
-_dev_or_above = require_role("developer")
+_can_upload = permission_checker(Permission.logs_upload)
+_can_view_logs = permission_checker(Permission.search_read)
 
 
 @router.post(
@@ -31,7 +33,7 @@ async def proxy_upload(
     file: UploadFile = File(...),
     service_name: str | None = Form(None),
     environment: str | None = Form(None),
-    user: Annotated[TokenPayload, Depends(_dev_or_above)] = None,
+    user: Annotated[TokenPayload, Depends(_can_upload)] = None,
 ):
     """
     RBAC-protected proxy: forwards file upload to the log-ingestion-service.
@@ -61,7 +63,7 @@ async def proxy_upload(
 )
 async def proxy_api_ingest(
     payload: dict,
-    user: Annotated[TokenPayload, Depends(_dev_or_above)] = None,
+    user: Annotated[TokenPayload, Depends(_can_upload)] = None,
 ):
     """Proxy API-based log ingestion to the ingestion service."""
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -80,7 +82,7 @@ async def proxy_api_ingest(
 )
 async def proxy_status(
     session_id: uuid.UUID,
-    user: Annotated[TokenPayload, Depends(get_current_user)] = None,
+    user: Annotated[TokenPayload, Depends(_can_view_logs)] = None,
 ):
     """Return ingestion status for a session (all authenticated users)."""
     async with httpx.AsyncClient(timeout=10.0) as client:

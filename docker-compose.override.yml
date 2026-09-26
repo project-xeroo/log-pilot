@@ -1,17 +1,34 @@
-version: "3.9"
-
-# Override for local development — hot-reload on source changes
+# Local development overrides — hot-reload on source changes.
+# Source is bind-mounted over the installed copy (cwd and PYTHONPATH take
+# precedence over site-packages). Remove this file, or use
+# `docker compose -f docker-compose.yml up`, for a production-like run.
 services:
   api-gateway:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    environment:
-      JWT_SECRET: "dev-secret-do-not-use-in-prod"
+    volumes:
+      - ./shared:/app/shared:ro
+      - ./services/api-gateway:/app/service:ro
 
   ai-service:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+    volumes:
+      - ./shared:/app/shared:ro
+      - ./services/ai-service:/app/service:ro
+
+  log-ingestion-service:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./shared:/app/shared:ro
+      - ./services/log-ingestion-service:/app/service:ro
 
   forecasting-service:
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+    volumes:
+      - ./shared:/app/shared:ro
+      - ./services/forecasting-service:/app/service:ro
 
   audit-service:
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8005 --reload
+    volumes:
+      - ./shared:/app/shared:ro
+      - ./services/audit-service:/app/service:ro

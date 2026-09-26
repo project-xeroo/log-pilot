@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
-from app.parsers.models import ParsedRecord
+from .models import ParsedRecord
 
 # Compiled regex for Apache Common Log Format
 _APACHE_COMMON_RE = re.compile(

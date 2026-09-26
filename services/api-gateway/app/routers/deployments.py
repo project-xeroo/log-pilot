@@ -28,7 +28,7 @@ class DeploymentIn(BaseModel):
 
 
 class DeploymentOut(BaseModel):
-    id: str
+    id: uuid.UUID
     service_name: str
     environment: str
     version: str
@@ -66,7 +66,7 @@ def record_deployment(body: DeploymentIn, session: DBSession):
         metadata_=body.metadata,
     )
     session.add(snap)
-    session.flush()
+    session.commit()  # commit before responding so follow-up reads see it
     return DeploymentOut.model_validate(snap)
 
 

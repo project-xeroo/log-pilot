@@ -1,36 +1,51 @@
-version: "3.9"
+# ── LogPilot — local development stack ──────────────────────────────────────
+# All services + infrastructure in one compose file.
+# For production, see infra/ (managed cloud deployment, PRD §13).
+#
+# Ports: console 3000 · gateway 8000 · ingestion 8001 · ai 8002 · forecasting 8003
+#        notification 8004 · audit 8005 · postgres 5432 · redis 6379 · object store (S3) 8333
 
-<<<<<<< HEAD
-services:
-  # ── Infrastructure ──────────────────────────────────────────────────────
+x-db-env: &db-env
+  DATABASE_URL: postgresql+asyncpg://logpilot:logpilot@postgres:5432/logpilot
+  REDIS_URL: redis://redis:6379/0
+
+x-celery-env: &celery-env
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/1
+
+x-storage-env: &storage-env
+  STORAGE_BUCKET: logpilot-uploads
+  STORAGE_ENDPOINT_URL: http://object-store:8333
+  STORAGE_ACCESS_KEY_ID: minioadmin
+  STORAGE_SECRET_ACCESS_KEY: minioadmin
+
+x-ai-env: &ai-env
+  # Empty OPENAI_API_KEY → offline stub provider (PRD §8.3 graceful degradation)
+  AI_PROVIDER: ${AI_PROVIDER:-openai}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+  CHAT_MODEL: ${CHAT_MODEL:-gpt-4o-mini}
+  REASONING_MODEL: ${REASONING_MODEL:-gpt-4o}
+
+x-forecasting-env: &forecasting-env
+  FORECASTING_LOOP_INTERVAL_SECONDS: ${FORECASTING_LOOP_INTERVAL_SECONDS:-60}
+  FORECASTING_WARNING_THRESHOLD: ${FORECASTING_WARNING_THRESHOLD:-60}
+  FORECASTING_CRITICAL_THRESHOLD: ${FORECASTING_CRITICAL_THRESHOLD:-80}
+  ENVIRONMENT: development
+
+x-after-migrate: &after-migrate
   postgres:
-    image: postgres:16-alpine
-=======
-# ── LogPilot — Phase: Proactive Failure Forecasting & Autonomy Model ─────────
-# All services + infrastructure in one compose file for local development.
-# For production, see infra/k8s/ (Kubernetes) or infra/terraform/ (cloud IaC).
-
-x-common-env: &common-env
-  DATABASE_URL: "postgresql+asyncpg://logpilot:logpilot@postgres:5432/logpilot"
-  REDIS_URL: "redis://redis:6379/0"
-  CELERY_BROKER_URL: "redis://redis:6379/0"
-  CELERY_RESULT_BACKEND: "redis://redis:6379/0"
-  AI_PROVIDER: "stub"
-  AI_API_KEY: ""
-  AI_BASE_URL: ""
-  JWT_SECRET_KEY: "dev-secret-change-in-production"
-  ENVIRONMENT: "development"
-  FORECASTING_LOOP_INTERVAL_SECONDS: "60"
-  FORECASTING_WARNING_THRESHOLD: "60"
-  FORECASTING_CRITICAL_THRESHOLD: "80"
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  migrate:
+    condition: service_completed_successfully
 
 services:
-
   # ── Infrastructure ─────────────────────────────────────────────────────────
-
   postgres:
     image: pgvector/pgvector:pg16
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
     environment:
       POSTGRES_USER: logpilot
       POSTGRES_PASSWORD: logpilot
@@ -55,203 +70,211 @@ services:
       timeout: 3s
       retries: 10
 
-<<<<<<< HEAD
-  # ── Application services ────────────────────────────────────────────────
-=======
-  # ── Database migrations ────────────────────────────────────────────────────
+  # S3-compatible object storage for raw uploads (stands in for cloud S3 locally).
+  # SeaweedFS replaces MinIO, whose images are no longer published on Docker Hub.
+  object-store:
+    image: chrislusf/seaweedfs:latest
+    command: server -s3 -dir=/data -s3.port=8333
+    ports:
+      - "8333:8333"
+    volumes:
+      - object_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
+  # Create the uploads bucket on startup
+  object-store-init:
+    image: chrislusf/seaweedfs:latest
+    depends_on:
+      object-store:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        echo 's3.bucket.create -name logpilot-uploads' | weed shell -master=object-store:9333 &&
+        echo 'Bucket ready.'
+      "
+
+  # ── Database migrations (single Alembic chain for the shared schema) ───────
+  # Reuses the log-ingestion image (it ships the migrations).
   migrate:
+    image: logpilot/log-ingestion:dev
     build:
       context: .
-      dockerfile: services/forecasting-service/Dockerfile
-    command: >
-      sh -c "
-        until pg_isready -h postgres -U logpilot; do sleep 1; done;
-        alembic -c alembic.ini upgrade head
-      "
+      dockerfile: services/log-ingestion-service/Dockerfile
+    command: alembic -c alembic.ini upgrade head
     environment:
-      <<: *common-env
-      DATABASE_URL: "postgresql://logpilot:logpilot@postgres:5432/logpilot"
+      <<: *db-env
     depends_on:
       postgres:
         condition: service_healthy
-    working_dir: /app/services/forecasting-service
 
-  # ── API Gateway ────────────────────────────────────────────────────────────
-
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
+  # ── Agent interface ────────────────────────────────────────────────────────
   api-gateway:
+    image: logpilot/api-gateway:dev
     build:
       context: .
       dockerfile: services/api-gateway/Dockerfile
     ports:
       - "8000:8000"
     environment:
-<<<<<<< HEAD
-      DATABASE_URL: "postgresql+psycopg2://logpilot:logpilot@postgres:5432/logpilot"
-      REDIS_URL: "redis://redis:6379/0"
-      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
-      AI_SERVICE_URL: "http://ai-service:8001"
-      FORECASTING_SERVICE_URL: "http://forecasting-service:8002"
-      AUDIT_SERVICE_URL: "http://audit-service:8003"
-      CORS_ORIGINS: '["http://localhost:5173","http://localhost:3000"]'
-=======
-      <<: *common-env
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
+      <<: *db-env
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-dev}
+      INGESTION_SERVICE_URL: http://log-ingestion-service:8001
+      AI_SERVICE_URL: http://ai-service:8002
+      FORECASTING_SERVICE_URL: http://forecasting-service:8003
+      AUDIT_SERVICE_URL: http://audit-service:8005
+      CORS_ORIGINS: '["http://localhost:3000","http://localhost:5173"]'
     depends_on:
-      postgres:
+      <<: *after-migrate
+      ai-service:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-<<<<<<< HEAD
-    volumes:
-      - ./shared:/app/shared:ro
-      - ./services/api-gateway/app:/app/app:ro
-=======
-      migrate:
-        condition: service_completed_successfully
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - .:/app
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
-      interval: 10s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
-  # ── Forecasting Service (Celery worker + beat) ─────────────────────────────
+  ai-service:
+    image: logpilot/ai-service:dev
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      <<: [*db-env, *ai-env]
+    depends_on:
+      <<: *after-migrate
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  log-ingestion-service:
+    image: logpilot/log-ingestion:dev
+    build:
+      context: .
+      dockerfile: services/log-ingestion-service/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      <<: [*db-env, *celery-env, *storage-env]
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-dev}
+    depends_on:
+      <<: *after-migrate
+      object-store-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # parse → redact → store → embed → dedup/cluster
+  processing-worker:
+    image: logpilot/processing-worker:dev
+    build:
+      context: .
+      dockerfile: services/processing-worker/Dockerfile
+    environment:
+      <<: [*db-env, *celery-env, *storage-env, *ai-env]
+      DATABASE_URL_SYNC: postgresql+psycopg2://logpilot:logpilot@postgres:5432/logpilot
+    depends_on:
+      <<: *after-migrate
+      object-store-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      replicas: 2    # Throughput target: > 10,000 records/minute
+
+  # ── Forecasting (PRD §4) ───────────────────────────────────────────────────
+  forecasting-service:
+    image: logpilot/forecasting:dev
+    build:
+      context: .
+      dockerfile: services/forecasting-service/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      <<: [*db-env, *celery-env, *forecasting-env]
+    depends_on:
+      <<: *after-migrate
+    restart: unless-stopped
 
   forecasting-worker:
+    image: logpilot/forecasting:dev
     build:
       context: .
       dockerfile: services/forecasting-service/Dockerfile
     command: celery -A app.loop.celery_app worker --loglevel=info --concurrency=4
     environment:
-      <<: *common-env
+      <<: [*db-env, *celery-env, *forecasting-env]
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    volumes:
-      - .:/app
-    working_dir: /app/services/forecasting-service
+      <<: *after-migrate
+    restart: unless-stopped
 
   forecasting-beat:
+    image: logpilot/forecasting:dev
     build:
       context: .
       dockerfile: services/forecasting-service/Dockerfile
     command: celery -A app.loop.celery_app beat --loglevel=info
     environment:
-      <<: *common-env
+      <<: [*db-env, *celery-env, *forecasting-env]
     depends_on:
       forecasting-worker:
         condition: service_started
-    volumes:
-      - .:/app
-    working_dir: /app/services/forecasting-service
+    restart: unless-stopped
 
-  # ── AI Service ─────────────────────────────────────────────────────────────
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
-
-  ai-service:
-    build:
-      context: .
-      dockerfile: services/ai-service/Dockerfile
-    ports:
-<<<<<<< HEAD
-      - "8001:8001"
-    environment:
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o}"
-    volumes:
-      - ./services/ai-service/app:/app/app:ro
-
-  forecasting-service:
-    build:
-      context: .
-      dockerfile: services/forecasting-service/Dockerfile
-    ports:
-      - "8002:8002"
-    environment:
-      DATABASE_URL: "postgresql+psycopg2://logpilot:logpilot@postgres:5432/logpilot"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./shared:/app/shared:ro
-      - ./services/forecasting-service/app:/app/app:ro
-=======
-      - "8002:8002"
-    environment:
-      <<: *common-env
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
-    volumes:
-      - .:/app
-    working_dir: /app/services/ai-service
-
-  # ── Notification Service ───────────────────────────────────────────────────
-
+  # Relays forecasting alerts to the gateway WebSocket + configured webhooks
   notification-service:
+    image: logpilot/notification:dev
     build:
       context: .
       dockerfile: services/notification-service/Dockerfile
     ports:
-      - "8003:8003"
+      - "8004:8004"
     environment:
-      <<: *common-env
+      <<: *db-env
     depends_on:
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
-    volumes:
-      - .:/app
-    working_dir: /app/services/notification-service
+    restart: unless-stopped
 
-  # ── Audit Service ──────────────────────────────────────────────────────────
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
-
+  # Agent action audit log + report PDF/Markdown export
   audit-service:
+    image: logpilot/audit:dev
     build:
       context: .
       dockerfile: services/audit-service/Dockerfile
     ports:
-<<<<<<< HEAD
-      - "8003:8003"
-    volumes:
-      - ./services/audit-service/app:/app/app:ro
+      - "8005:8005"
+    environment:
+      <<: *db-env
+    depends_on:
+      <<: *after-migrate
+    restart: unless-stopped
 
-  frontend:
+  # ── Supervisory console (static build + nginx; proxies /api and /ws) ────────
+  console:
+    image: logpilot/console:dev
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     ports:
-      - "5173:5173"
-    environment:
-      VITE_API_BASE_URL: "http://localhost:8000"
+      - "3000:80"
     depends_on:
-      - api-gateway
-    volumes:
-      - ./frontend/src:/app/src:ro
-=======
-      - "8004:8004"
-    environment:
-      <<: *common-env
-    depends_on:
-      postgres:
+      api-gateway:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8004 --reload
-    volumes:
-      - .:/app
-    working_dir: /app/services/audit-service
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  object_data:

@@ -46,10 +46,10 @@ async def find_similar_incidents(
             id,
             alert_id,
             label,
-            1 - (embedding <=> :embedding::vector) AS similarity
+            1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
         FROM leading_indicator_embeddings
         WHERE service_id = :service_id
-        ORDER BY embedding <=> :embedding::vector
+        ORDER BY embedding <=> CAST(:embedding AS vector)
         LIMIT :top_k
     """)
     result = await db.execute(stmt, {

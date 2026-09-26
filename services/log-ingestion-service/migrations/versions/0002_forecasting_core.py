@@ -1,7 +1,8 @@
-"""initial schema — all LogPilot forecasting tables
+"""Forecasting core — monitored services, velocity, risk, alerts, pre-mortems,
+autonomy policy, and the agent_actions audit trail.
 
-Revision ID: 0001
-Revises:
+Revision ID: 0002_forecasting_core
+Revises: 0001_phase1_initial
 Create Date: 2024-01-01 00:00:00.000000
 """
 from typing import Sequence, Union
@@ -9,14 +10,14 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0001"
-down_revision: Union[str, None] = None
+revision: str = "0002_forecasting_core"
+down_revision: Union[str, None] = "0001_phase1_initial"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Enable pgvector extension
+    # pgvector is enabled in 0001; kept idempotent here
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # ── monitored_services ────────────────────────────────────────────────────
@@ -137,24 +138,35 @@ def upgrade() -> None:
     # ── agent_actions ─────────────────────────────────────────────────────────
     op.create_table(
         "agent_actions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        # Server default so raw-SQL audit writers (chat, processing worker) need not supply an id
+        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tool_name", sa.String(128), nullable=False),
         sa.Column("service_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("trigger", sa.String(128), nullable=False),
         sa.Column("confidence", sa.Float, nullable=True),
         sa.Column("autonomy_tier", sa.String(32), nullable=False),
         sa.Column("approver", sa.String(255), nullable=True),
-        sa.Column("description", sa.Text, nullable=False),
+        sa.Column("actor_user_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("description", sa.Text, nullable=True),
+        sa.Column("input_summary", sa.Text, nullable=True),
+        sa.Column("output_summary", sa.Text, nullable=True),
+        sa.Column("status", sa.String(32), nullable=False, server_default="completed"),
+        sa.Column("error", sa.Text, nullable=True),
+        sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("reversed", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("reversed_by", sa.String(255), nullable=True),
         sa.Column("reversed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("executed_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("executed_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["service_id"], ["monitored_services.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_agent_actions_tool", "agent_actions", ["tool_name"])
+    op.create_index("ix_agent_actions_tool_name", "agent_actions", ["tool_name"])
+    op.create_index("ix_agent_actions_executed_at", "agent_actions", ["executed_at"])
+    op.create_index("ix_agent_actions_session_id", "agent_actions", ["session_id"])
+    op.create_index("ix_agent_actions_organization_id", "agent_actions", ["organization_id"])
 
     # ── leading_indicator_embeddings (pgvector) ───────────────────────────────
     # Stores historical failure embeddings for similarity matching

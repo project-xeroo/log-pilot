@@ -11,8 +11,18 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.jwt_auth import create_access_token, verify_password, hash_password, TokenResponse
+from app.auth import (
+    CurrentUser,
+    TokenResponse,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from shared.config import get_db
+from shared.models import Role
+
+# Roles a user may pick when self-registering; others are assigned by an admin
+_SELF_SERVE_ROLES = {Role.developer, Role.junior, Role.viewer}
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -26,7 +36,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     full_name: str | None = None
-    role: str = "developer"
+    role: Role = Role.developer
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -38,8 +48,6 @@ async def login(
     Authenticate with email + password.
     Returns a JWT access token.
     """
-    from app.config import settings
-
     result = await db.execute(
         text("SELECT id, hashed_password, role, is_active FROM users WHERE email = :email"),
         {"email": payload.email},
@@ -57,7 +65,7 @@ async def login(
             detail="Account is inactive.",
         )
 
-    token = create_access_token(subject=str(row.id), role=row.role)
+    token = create_access_token(row.id, row.role)
     return TokenResponse(access_token=token)
 
 
@@ -67,13 +75,13 @@ async def register(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Register a new user account (self-serve, developer/junior roles only).
-    Admins and SREs are created by existing admins.
+    Register a new user account (self-serve: developer, junior, or viewer).
+    Admin, SRE, and manager accounts are assigned by an existing admin.
     """
-    if payload.role in ("admin", "sre"):
+    if payload.role not in _SELF_SERVE_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin and SRE accounts must be created by an existing admin.",
+            detail=f"'{payload.role.value}' accounts must be assigned by an existing admin.",
         )
 
     existing = await db.execute(
@@ -97,10 +105,40 @@ async def register(
             "email": payload.email,
             "hashed_password": hashed,
             "full_name": payload.full_name,
-            "role": payload.role,
+            "role": payload.role.value,
         },
     )
     await db.commit()
 
-    token = create_access_token(subject=str(user_id), role=payload.role)
+    token = create_access_token(user_id, payload.role)
     return TokenResponse(access_token=token)
+
+
+class MeResponse(BaseModel):
+    id: str
+    email: str
+    full_name: str | None
+    role: str
+    permissions: list[str]
+
+
+@router.get("/me", response_model=MeResponse)
+async def me(current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    """Return the caller's profile and effective permissions (drives UI gating)."""
+    from shared.models import ROLE_PERMISSIONS
+
+    result = await db.execute(
+        text("SELECT id, email, full_name, role, is_active FROM users WHERE id = :id"),
+        {"id": current_user.id},
+    )
+    row = result.fetchone()
+    if not row or not row.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    role = Role(row.role)
+    return MeResponse(
+        id=str(row.id),
+        email=row.email,
+        full_name=row.full_name,
+        role=role.value,
+        permissions=sorted(p.value for p in ROLE_PERMISSIONS[role]),
+    )

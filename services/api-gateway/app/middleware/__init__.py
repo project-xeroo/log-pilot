@@ -1,19 +1,23 @@
 """
 Request logging middleware for the API Gateway.
+
+Every request is logged with method, path, status, and duration.
 """
 from __future__ import annotations
 
 import time
-import logging
-
+import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-logger = logging.getLogger("api-gateway")
+log = structlog.get_logger()
 
 
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """Logs every request with method, path, status code, and duration."""
+class AuditLoggingMiddleware(BaseHTTPMiddleware):
+    """
+    Logs every API request + response.
+    Skips /health and /docs/* endpoints.
+    """
 
     _SKIP_PATHS = {"/health", "/docs", "/redoc", "/openapi.json"}
 
@@ -22,11 +26,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start) * 1000
         if request.url.path not in self._SKIP_PATHS:
-            logger.info(
-                "%s %s %d %.1fms",
-                request.method,
-                request.url.path,
-                response.status_code,
-                duration_ms,
+            log.info(
+                "request",
+                method=request.method,
+                path=request.url.path,
+                status=response.status_code,
+                duration_ms=round(duration_ms, 1),
             )
         return response
+
+
+# Name used by the Phase 3/4 gateway
+RequestLoggingMiddleware = AuditLoggingMiddleware

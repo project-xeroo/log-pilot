@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from app.parsers.models import ParsedRecord
+from .models import ParsedRecord
 
 # Nginx uses the same Common-style structure but its timestamp format differs
 _NGINX_RE = re.compile(

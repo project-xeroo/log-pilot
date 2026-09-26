@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -54,7 +54,7 @@ class GenerateReportRequest(BaseModel):
 
 
 class ReportOut(BaseModel):
-    id: str
+    id: uuid.UUID
     title: str
     status: str
     summary: str | None
@@ -72,7 +72,7 @@ class ReportOut(BaseModel):
     ttr_seconds: float | None
     generation_model: str | None
     generation_duration_ms: float | None
-    author_id: str | None
+    author_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -126,7 +126,7 @@ def generate_report(
         generation_duration_ms=draft.get("duration_ms"),
     )
     session.add(report)
-    session.flush()
+    session.commit()  # commit before responding so follow-up reads see it
     return ReportOut.model_validate(report)
 
 
@@ -180,7 +180,7 @@ def update_report(report_id: str, body: ReportSectionUpdate, session: DBSession)
         raise HTTPException(status_code=404, detail="Report not found")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(report, field, value)
-    session.flush()
+    session.commit()  # commit before responding so follow-up reads see it
     return ReportOut.model_validate(report)
 
 
@@ -194,6 +194,7 @@ def delete_report(report_id: str, session: DBSession):
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     session.delete(report)
+    session.commit()
 
 
 @router.get(
@@ -201,7 +202,7 @@ def delete_report(report_id: str, session: DBSession):
     dependencies=[require_permission(Permission.report_export)],
 )
 def export_report(report_id: str, format: str, session: DBSession):
-    """Delegate export to the audit service; returns the raw bytes or a URL."""
+    """Delegate rendering to the audit service and stream the file back."""
     if format not in ("pdf", "markdown"):
         raise HTTPException(status_code=400, detail="format must be 'pdf' or 'markdown'")
     report = session.get(IncidentReport, uuid.UUID(report_id))
@@ -219,5 +220,13 @@ def export_report(report_id: str, format: str, session: DBSession):
 
     # Mark report as exported
     report.status = ReportStatus.exported
-    session.flush()
-    return resp.json()
+    session.commit()  # commit before responding so follow-up reads see it
+    return Response(
+        content=resp.content,
+        media_type=resp.headers.get("content-type", "application/octet-stream"),
+        headers={
+            "Content-Disposition": resp.headers.get(
+                "content-disposition", f'attachment; filename="incident-report-{report_id[:8]}.{format}"'
+            )
+        },
+    )

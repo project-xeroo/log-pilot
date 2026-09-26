@@ -1,82 +1,96 @@
-<<<<<<< HEAD
-.PHONY: up down build logs ps \
-        migrate seed \
-        test test-api test-ai test-forecasting test-audit \
-        lint frontend-install frontend-dev
+.PHONY: help dev up down build ps logs logs-worker migrate migrate-local create-admin \
+        test test-gateway test-ai test-ingestion test-worker test-forecasting \
+        test-parsers test-redact rbac-smoke \
+        frontend-install frontend-dev frontend-build frontend-typecheck lint clean
 
-# ── Docker Compose ────────────────────────────────────────────────────────
-up:
-	docker compose up -d
-=======
-.PHONY: help dev up down migrate test test-parsers test-redaction logs clean
+# Every service has its own top-level `app` package, so each suite runs in its
+# own pytest process (from the repo root, which puts `shared` on sys.path).
+PYTEST := python -m pytest -p no:cacheprovider
 
 # ── Help ───────────────────────────────────────────────────────────────────
 help:
 	@echo ""
-	@echo "LogPilot — Phase 1 Development Commands"
+	@echo "LogPilot — Development Commands"
 	@echo ""
-	@echo "  make dev          Start all services (infra + app)"
-	@echo "  make up           Same as dev"
-	@echo "  make down         Stop and remove containers"
-	@echo "  make migrate      Run database migrations"
-	@echo "  make test         Run all tests"
-	@echo "  make test-parsers Run parser unit tests only"
-	@echo "  make test-redact  Run PII redaction unit tests only"
-	@echo "  make logs         Tail all service logs"
-	@echo "  make clean        Remove volumes and reset local state"
+	@echo "  make up             Build and start all services (infra + app + console)"
+	@echo "  make down           Stop and remove containers"
+	@echo "  make migrate        Run database migrations"
+	@echo "  make create-admin   Create an admin user (EMAIL=... required)"
+	@echo "  make test           Run every backend test suite"
+	@echo "  make frontend-dev   Run the console with hot reload on :5173"
+	@echo "  make logs           Tail application logs"
+	@echo "  make clean          Remove volumes and reset local state"
 	@echo ""
 
-# ── Local development ──────────────────────────────────────────────────────
+# ── Docker Compose ─────────────────────────────────────────────────────────
 dev: up
 
 up:
 	docker compose up --build -d
 	@echo ""
 	@echo "Services starting..."
+	@echo "  Console:             http://localhost:3000"
 	@echo "  API Gateway:         http://localhost:8000/docs"
-	@echo "  Ingestion Service:   http://localhost:8001/docs"
-	@echo "  MinIO Console:       http://localhost:9001  (admin/minioadmin)"
+	@echo "  AI Service:          http://localhost:8002/docs"
+	@echo "  Object store (S3):   http://localhost:8333"
 	@echo ""
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
 
 down:
 	docker compose down
 
-<<<<<<< HEAD
 build:
 	docker compose build
-
-logs:
-	docker compose logs -f
 
 ps:
 	docker compose ps
 
-# ── Database migrations ───────────────────────────────────────────────────
+logs:
+	docker compose logs -f api-gateway ai-service log-ingestion-service processing-worker forecasting-worker
+
+logs-worker:
+	docker compose logs -f processing-worker
+
+# ── Database ───────────────────────────────────────────────────────────────
 migrate:
-	docker compose exec api-gateway alembic upgrade head
-	docker compose exec forecasting-service alembic upgrade head
+	docker compose run --rm migrate
 
-# Dev helper: create all tables directly (no Alembic, for local prototyping)
-db-init:
-	docker compose exec api-gateway python -c "from shared.utils import init_db; init_db(); print('DB initialised')"
+migrate-local:
+	cd services/log-ingestion-service && alembic upgrade head
 
-# ── Testing ───────────────────────────────────────────────────────────────
-test: test-api test-ai test-forecasting test-audit
+# First admin account (self-registration cannot create admin/sre/manager)
+create-admin:
+	@test -n "$(EMAIL)" || (echo "Usage: make create-admin EMAIL=you@example.com" && exit 1)
+	docker compose exec api-gateway python -m app.cli create-user --email $(EMAIL) --role admin
 
-test-api:
-	docker compose exec api-gateway pytest tests/ -v
+# ── Tests ──────────────────────────────────────────────────────────────────
+test: test-gateway test-ai test-ingestion test-worker test-forecasting
+
+test-gateway:
+	$(PYTEST) services/api-gateway/tests
 
 test-ai:
-	docker compose exec ai-service pytest tests/ -v
+	$(PYTEST) services/ai-service/tests
+
+test-ingestion:
+	$(PYTEST) services/log-ingestion-service/tests
+
+test-worker:
+	$(PYTEST) services/processing-worker/tests
 
 test-forecasting:
-	docker compose exec forecasting-service pytest tests/ -v
+	$(PYTEST) services/forecasting-service/tests
 
-test-audit:
-	docker compose exec audit-service pytest tests/ -v
+test-parsers:
+	$(PYTEST) services/log-ingestion-service/tests/test_parsers.py -v
 
-# ── Frontend ──────────────────────────────────────────────────────────────
+test-redact:
+	$(PYTEST) services/log-ingestion-service/tests/test_redaction.py -v
+
+rbac-smoke:
+	@echo "Running RBAC smoke tests against http://localhost:8000 ..."
+	python docs/scripts/rbac_smoke_test.py
+
+# ── Frontend ───────────────────────────────────────────────────────────────
 frontend-install:
 	cd frontend && npm install
 
@@ -86,44 +100,14 @@ frontend-dev:
 frontend-build:
 	cd frontend && npm run build
 
-# ── Linting ───────────────────────────────────────────────────────────────
+frontend-typecheck:
+	cd frontend && npm run typecheck
+
 lint:
 	cd frontend && npm run lint
-
-# ── RBAC smoke test ───────────────────────────────────────────────────────
-rbac-smoke:
-	@echo "Running RBAC smoke tests against http://localhost:8000 ..."
-	python docs/scripts/rbac_smoke_test.py
-=======
-# ── Database migrations ─────────────────────────────────────────────────────
-migrate:
-	docker compose run --rm migrate
-
-migrate-local:
-	cd services/log-ingestion-service && alembic upgrade head
-
-# ── Tests ──────────────────────────────────────────────────────────────────
-test:
-	pytest services/log-ingestion-service/tests/ \
-	       services/processing-worker/tests/ \
-	       -v --tb=short
-
-test-parsers:
-	pytest services/log-ingestion-service/tests/test_parsers.py -v
-
-test-redact:
-	pytest services/log-ingestion-service/tests/test_redaction.py -v
-
-# ── Logs ───────────────────────────────────────────────────────────────────
-logs:
-	docker compose logs -f api-gateway log-ingestion-service processing-worker
-
-logs-worker:
-	docker compose logs -f processing-worker
 
 # ── Cleanup ────────────────────────────────────────────────────────────────
 clean:
 	docker compose down -v --remove-orphans
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0

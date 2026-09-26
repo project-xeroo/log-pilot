@@ -3,8 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getReport, updateReport, deleteReport, createOutcome } from "@/api";
-import { useAuthStore } from "@/store/auth";
+import { getReport, updateReport, deleteReport, createOutcome, exportReport } from "@/api";
+import { useAuthStore } from "@/store/authStore";
 import toast from "react-hot-toast";
 import {
   Edit2,
@@ -13,8 +13,6 @@ import {
   Download,
   Trash2,
   CheckCircle,
-  XCircle,
-  Clock,
   ArrowLeft,
 } from "lucide-react";
 import type { IncidentReport, OutcomeVerdict } from "@/types";
@@ -26,14 +24,12 @@ import type { IncidentReport, OutcomeVerdict } from "@/types";
 function Section({
   title,
   content,
-  fieldKey,
   isEditing,
   value,
   onChange,
 }: {
   title: string;
   content: string | null;
-  fieldKey: string;
   isEditing: boolean;
   value: string;
   onChange: (v: string) => void;
@@ -233,7 +229,7 @@ export default function ReportDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { hasRole } = useAuthStore();
+  const can = useAuthStore((s) => s.can);
 
   const { data: report, isLoading } = useQuery({
     queryKey: ["report", id],
@@ -264,8 +260,20 @@ export default function ReportDetailPage() {
     },
   });
 
-  function handleExport(format: "pdf" | "markdown") {
-    window.open(`/api/reports/${id}/export/${format}`, "_blank");
+  async function handleExport(format: "pdf" | "markdown") {
+    if (!id) return;
+    try {
+      const blob = await exportReport(id, format);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `incident-report-${id.slice(0, 8)}.${format === "pdf" ? "pdf" : "md"}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      qc.invalidateQueries({ queryKey: ["report", id] });
+    } catch {
+      toast.error("Export failed");
+    }
   }
 
   function startEdit() {
@@ -341,7 +349,7 @@ export default function ReportDetailPage() {
               </>
             ) : (
               <>
-                {hasRole("admin", "sre") && (
+                {can("report:update") && (
                   <button onClick={startEdit} style={{ padding: "7px 14px", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
                     <Edit2 size={14} /> Edit
                   </button>
@@ -352,12 +360,12 @@ export default function ReportDetailPage() {
                 <button onClick={() => handleExport("pdf")} style={{ padding: "7px 14px", background: "var(--accent)", border: "none", borderRadius: "var(--radius)", color: "#fff", display: "flex", alignItems: "center", gap: 6 }}>
                   <Download size={14} /> PDF
                 </button>
-                {hasRole("admin", "sre", "developer") && (
+                {can("outcome:write") && (
                   <button onClick={() => setShowOutcomeModal(true)} style={{ padding: "7px 14px", background: "var(--success)", border: "none", borderRadius: "var(--radius)", color: "#fff", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
                     <CheckCircle size={14} /> Log Outcome
                   </button>
                 )}
-                {hasRole("admin") && (
+                {can("report:delete") && (
                   <button onClick={() => { if (confirm("Delete this report?")) remove(); }} style={{ padding: "7px 14px", background: "var(--danger)", border: "none", borderRadius: "var(--radius)", color: "#fff", display: "flex", alignItems: "center", gap: 6 }}>
                     <Trash2 size={14} />
                   </button>
@@ -401,7 +409,6 @@ export default function ReportDetailPage() {
           key={key}
           title={title}
           content={report[key] as string | null}
-          fieldKey={key}
           isEditing={isEditing}
           value={(edits[key] as string) ?? (report[key] as string) ?? ""}
           onChange={(v) => setEdits((d) => ({ ...d, [key]: v }))}

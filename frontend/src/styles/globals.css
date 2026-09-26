@@ -1,56 +1,86 @@
-/* LogPilot global styles */
-*, *::before, *::after { box-sizing: border-box; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/*
+ * Design tokens. Tailwind classes cover most screens; the Risk Board, Reports,
+ * Deployments, and Settings screens use these variables in inline styles.
+ * Values match the light Tailwind theme so every screen reads as one console.
+ */
 :root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --surface2: #21262d;
-  --border: #30363d;
-  --text: #e6edf3;
-  --text-muted: #8b949e;
+  --bg: #f6f8fa;
+  --surface: #ffffff;
+  --surface2: #f6f8fa;
+  --border: #e5e7eb;
+  --text: #1f2328;
+  --text-muted: #57606a;
   --accent: #3b82d4;
-  --accent-hover: #5b9bd5;
-  --danger: #f85149;
-  --warning: #e3b341;
-  --success: #3fb950;
-  --purple: #8b5cf6;
+  --accent-hover: #2f6db3;
+  --danger: #cf222e;
+  --warning: #9a6700;
+  --success: #1a7f37;
+  --purple: #7c5cd8;
   --radius: 6px;
   --font: -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 
-body {
-  margin: 0;
-  font-family: var(--font);
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text);
-  background: var(--bg);
+@layer base {
+  body {
+    @apply bg-white text-[#1f2328] text-[14px] leading-relaxed;
+    font-family: var(--font);
+  }
+
+  * {
+    @apply box-border;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
 }
 
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
+@layer components {
+  /* Severity badge colours */
+  .badge-error    { @apply bg-red-100 text-red-700 border border-red-200; }
+  .badge-warn     { @apply bg-yellow-100 text-yellow-700 border border-yellow-200; }
+  .badge-info     { @apply bg-blue-100 text-blue-700 border border-blue-200; }
+  .badge-debug    { @apply bg-gray-100 text-gray-600 border border-gray-200; }
+  .badge-critical { @apply bg-red-200 text-red-800 border border-red-300; }
 
-button {
-  font-family: inherit;
-  cursor: pointer;
+  /* Card */
+  .card {
+    @apply bg-white border border-border rounded-lg p-4;
+  }
+
+  /* Form controls for the inline-styled screens (scoped so Tailwind screens are unaffected) */
+  .lp-classic input,
+  .lp-classic textarea,
+  .lp-classic select {
+    font-family: inherit;
+    font-size: 14px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    outline: none;
+    width: 100%;
+  }
+  .lp-classic input[type="checkbox"],
+  .lp-classic input[type="radio"] {
+    width: auto;
+  }
+  .lp-classic input:focus,
+  .lp-classic textarea:focus,
+  .lp-classic select:focus {
+    border-color: var(--accent);
+  }
+  .lp-classic a { color: var(--accent); }
+  .lp-classic button { font-family: inherit; cursor: pointer; }
 }
-
-input, textarea, select {
-  font-family: inherit;
-  font-size: 14px;
-  background: var(--surface2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 12px;
-  outline: none;
-  width: 100%;
-}
-
-input:focus, textarea:focus, select:focus {
-  border-color: var(--accent);
-}
-
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }

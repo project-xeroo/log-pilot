@@ -23,6 +23,7 @@ celery_app.conf.update(
         "app.tasks.ingestion.*": {"queue": "ingestion"},
         "app.tasks.embeddings.*": {"queue": "embeddings"},
         "app.tasks.anomaly.*": {"queue": "anomaly"},
+        "analysis.*": {"queue": "anomaly"},
     },
     task_queues_config={
         "ingestion": {"exchange": "ingestion", "routing_key": "ingestion"},
@@ -37,5 +38,10 @@ celery_app.conf.update(
     worker_concurrency=4,
 )
 
-# Auto-discover tasks in all app.tasks submodules
-celery_app.autodiscover_tasks(["app.tasks"])
+# Register every task module explicitly (autodiscover only looks for a
+# `tasks` submodule, which would miss the analysis and embedding tasks)
+celery_app.conf.include = [
+    "app.tasks",             # Phase 1: parse → redact → store
+    "app.embeddings",        # Phase 2: embedding generation
+    "app.tasks.analysis",    # Phase 3: dedup → clustering → health → anomalies
+]

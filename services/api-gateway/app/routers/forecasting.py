@@ -318,8 +318,17 @@ async def approve_report(
     db: AsyncSession = Depends(get_db),
 ):
     """Human sign-off on a draft pre-mortem report."""
-    from services.ai_service.app.reports import approve_report as _approve
-    report = await _approve(db, report_id, reviewer=body.reviewed_by, notes=body.notes)
+    result = await db.execute(select(PreMortemReport).where(PreMortemReport.id == report_id))
+    report = result.scalar_one_or_none()
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if report.status not in ("draft", "pending_review"):
+        raise HTTPException(status_code=409, detail=f"Report is already '{report.status}' — cannot approve")
+
+    report.status = "approved"
+    report.reviewed_by = body.reviewed_by
+    report.reviewed_at = datetime.now(timezone.utc)
+    report.reviewer_notes = body.notes
     await db.commit()
     await db.refresh(report)
     return report
@@ -339,14 +348,20 @@ async def export_report(
         raise HTTPException(status_code=404, detail="Report not found")
 
     if fmt == "pdf":
-        from services.ai_service.app.reports import export_report_pdf
-        pdf_bytes = await export_report_pdf(report)
+        try:
+            import markdown as md
+            from weasyprint import HTML
+        except ImportError:
+            raise HTTPException(
+                status_code=501,
+                detail="PDF export requires the optional 'markdown' and 'weasyprint' packages.",
+            )
+        html_body = md.markdown(report.body_markdown, extensions=["tables"])
+        pdf_bytes = HTML(string=f"<html><body>{html_body}</body></html>").write_pdf()
         return Response(content=pdf_bytes, media_type="application/pdf",
                         headers={"Content-Disposition": f"attachment; filename=premortem-{report_id}.pdf"})
 
-    from services.ai_service.app.reports import export_report_markdown
-    md_text = await export_report_markdown(report)
-    return Response(content=md_text, media_type="text/markdown",
+    return Response(content=report.body_markdown, media_type="text/markdown",
                     headers={"Content-Disposition": f"attachment; filename=premortem-{report_id}.md"})
 
 

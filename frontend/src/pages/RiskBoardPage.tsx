@@ -18,7 +18,7 @@ import {
   resolveAnomaly,
   acknowledgeRegression,
 } from "@/api";
-import { useAuthStore } from "@/store/auth";
+import { useAuthStore } from "@/store/authStore";
 import type {
   ServiceHealthState,
   AnomalyEvent,
@@ -235,8 +235,7 @@ function AnomalyCard({
   anomaly: AnomalyEvent;
   onResolve?: (id: string) => void;
 }) {
-  const { user, hasRole } = useAuthStore();
-  const canResolve = hasRole("sre", "admin");
+  const canResolve = useAuthStore((s) => s.can("alert:manage"));
 
   return (
     <div
@@ -326,7 +325,7 @@ function RegressionCard({
   regression: DeploymentRegression;
   onAcknowledge?: (id: string) => void;
 }) {
-  const canAck = useAuthStore((s) => s.hasRole("sre", "admin"));
+  const canAck = useAuthStore((s) => s.can("alert:manage"));
 
   return (
     <div
@@ -397,7 +396,7 @@ function RegressionCard({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function RiskBoardPage() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"health" | "anomalies" | "regressions">("health");
 

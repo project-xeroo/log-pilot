@@ -200,7 +200,7 @@ async def write_audit_action(
     action = AgentAction(
         tool_name=tool_name,
         trigger=trigger,
-        autonomy_tier=AutonomyTier.AUTONOMOUS,
+        autonomy_tier=AutonomyTier.AUTONOMOUS.value,
         actor_user_id=actor_user_id,
         session_id=session_id,
         input_summary=input_summary,

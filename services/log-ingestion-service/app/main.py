@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from typing import Annotated
 
 import structlog
@@ -268,18 +269,31 @@ async def get_session_status(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+# Task name registered by the processing worker (services/processing-worker)
+_PROCESS_TASK = "app.tasks.ingestion.process_log_session"
+
+
+@lru_cache
+def _celery_client():
+    """Producer-only Celery app: tasks run in the processing-worker service."""
+    from celery import Celery
+
+    return Celery(
+        "logpilot-ingestion",
+        broker=settings.celery_broker_url,
+        backend=settings.celery_result_backend,
+    )
+
+
 def _enqueue_processing(session_id: str, storage_key: str) -> None:
-    """
-    Enqueue a Celery task to process the uploaded file.
-    Import is deferred to avoid Celery worker dependency at import time.
-    """
+    """Enqueue the parse → redact → store pipeline on the worker's ingestion queue."""
     try:
-        from app.tasks import process_log_session
-        process_log_session.apply_async(
+        _celery_client().send_task(
+            _PROCESS_TASK,
             args=[session_id, storage_key],
-            countdown=0,
             queue="ingestion",
         )
-    except ImportError:
-        # Processing worker not co-located — task is picked up by the worker service
-        log.warning("celery_not_available_locally", session_id=session_id)
+        log.info("processing.enqueued", session_id=session_id)
+    except Exception as exc:
+        # Upload is persisted; the session stays 'pending' and can be re-enqueued
+        log.error("processing.enqueue_failed", session_id=session_id, error=str(exc))

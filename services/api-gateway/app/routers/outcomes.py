@@ -19,6 +19,7 @@ DBSession = Annotated[Session, Depends(get_session)]
 class OutcomeCreate(BaseModel):
     incident_id: str
     report_id: str | None = None
+    alert_id: str | None = None
     verdict: OutcomeVerdict
     rca_accurate: bool | None = None
     forecast_accurate: bool | None = None
@@ -31,9 +32,10 @@ class OutcomeCreate(BaseModel):
 
 
 class OutcomeOut(BaseModel):
-    id: str
+    id: uuid.UUID
     incident_id: str
-    report_id: str | None
+    report_id: uuid.UUID | None
+    alert_id: uuid.UUID | None
     verdict: str
     rca_accurate: bool | None
     forecast_accurate: bool | None
@@ -43,7 +45,7 @@ class OutcomeOut(BaseModel):
     fired_indicators: list[str] | None
     forecast_score_at_incident: float | None
     notes: str | None
-    reviewed_by_id: str | None
+    reviewed_by_id: uuid.UUID | None
 
     model_config = {"from_attributes": True}
 
@@ -63,6 +65,7 @@ def create_outcome(
     outcome = IncidentOutcome(
         incident_id=body.incident_id,
         report_id=uuid.UUID(body.report_id) if body.report_id else None,
+        alert_id=uuid.UUID(body.alert_id) if body.alert_id else None,
         verdict=body.verdict,
         rca_accurate=body.rca_accurate,
         forecast_accurate=body.forecast_accurate,
@@ -75,7 +78,7 @@ def create_outcome(
         reviewed_by_id=current_user.id,
     )
     session.add(outcome)
-    session.flush()
+    session.commit()  # commit before responding so follow-up reads see it
 
     # Fire-and-forget: notify forecasting service to update weights
     import httpx

@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from app.parsers.models import ParsedRecord
+from .models import ParsedRecord
 
 # Priority-ordered lists of JSON keys for each target field
 _TIMESTAMP_KEYS = ["timestamp", "time", "ts", "@timestamp", "datetime", "date", "created_at"]

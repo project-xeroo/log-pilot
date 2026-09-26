@@ -1,24 +1,20 @@
 FROM python:3.11-slim
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app
+
 WORKDIR /app
 
-# System dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install shared package first
 COPY shared/ /app/shared/
-RUN pip install --no-cache-dir /app/shared/
+RUN pip install /app/shared/
 
-# Install service dependencies
-COPY services/log-ingestion-service/pyproject.toml /app/service/
 COPY services/log-ingestion-service/ /app/service/
-RUN pip install --no-cache-dir /app/service/
+RUN pip install /app/service/
 
 WORKDIR /app/service
-
-ENV PYTHONPATH=/app
 
 EXPOSE 8001
 

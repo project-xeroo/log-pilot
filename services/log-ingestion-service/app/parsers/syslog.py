@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
-from app.parsers.models import ParsedRecord
+from .models import ParsedRecord
 
 # RFC 3164 — the classic BSD syslog format
 # <165>Nov  3 10:22:39 myhost myapp[12345]: This is the message

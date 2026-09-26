@@ -4,8 +4,7 @@ Phase 1 initial schema migration.
 Creates:
   - users
   - log_sessions
-  - log_records  (with indexes for date-partitioning, FTS, service+time)
-  - agent_actions
+  - log_records  (with indexes for date-partitioning, FTS, regex, service+time, vectors)
 """
 from __future__ import annotations
 
@@ -19,37 +18,34 @@ branch_labels = None
 depends_on = None
 
 
+def _create_enum(name: str, *values: str) -> None:
+    """CREATE TYPE is not idempotent in Postgres, so guard it explicitly."""
+    labels = ", ".join(f"'{v}'" for v in values)
+    op.execute(f"""
+        DO $$ BEGIN
+            CREATE TYPE {name} AS ENUM ({labels});
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+
+
+SEVERITY = ("TRACE", "DEBUG", "INFO", "WARN", "WARNING", "ERROR", "CRITICAL", "FATAL", "UNKNOWN")
+LOG_FORMAT = ("apache_common", "apache_combined", "nginx", "json", "syslog", "custom", "unknown")
+INGESTION_STATUS = ("pending", "processing", "completed", "failed", "partial")
+USER_ROLE = ("admin", "sre", "developer", "manager", "junior", "viewer")
+
+
 def upgrade() -> None:
     # Extensions
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     op.execute("CREATE EXTENSION IF NOT EXISTS btree_gin")
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # Enums
-    op.execute("""
-        CREATE TYPE IF NOT EXISTS severitylevel AS ENUM (
-            'TRACE','DEBUG','INFO','WARN','WARNING','ERROR','CRITICAL','FATAL','UNKNOWN'
-        )
-    """)
-    op.execute("""
-        CREATE TYPE IF NOT EXISTS logformat AS ENUM (
-            'apache_common','apache_combined','nginx','json','syslog','custom','unknown'
-        )
-    """)
-    op.execute("""
-        CREATE TYPE IF NOT EXISTS ingestionstatus AS ENUM (
-            'pending','processing','completed','failed','partial'
-        )
-    """)
-    op.execute("""
-        CREATE TYPE IF NOT EXISTS autonomytier AS ENUM (
-            'read_only','propose_only','autonomous'
-        )
-    """)
-    op.execute("""
-        CREATE TYPE IF NOT EXISTS userrole AS ENUM (
-            'admin','sre','developer','manager','junior','viewer'
-        )
-    """)
+    _create_enum("severitylevel", *SEVERITY)
+    _create_enum("logformat", *LOG_FORMAT)
+    _create_enum("ingestionstatus", *INGESTION_STATUS)
+    _create_enum("userrole", *USER_ROLE)
 
     # users
     op.create_table(
@@ -60,7 +56,7 @@ def upgrade() -> None:
         sa.Column("email", sa.String(320), nullable=False),
         sa.Column("hashed_password", sa.String(128), nullable=False),
         sa.Column("full_name", sa.String(256), nullable=True),
-        sa.Column("role", sa.Enum("admin", "sre", "developer", "manager", "junior", "viewer", name="userrole"), nullable=False, server_default="developer"),
+        sa.Column("role", postgresql.ENUM(*USER_ROLE, name="userrole", create_type=False), nullable=False, server_default="developer"),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
         sa.UniqueConstraint("email", "organization_id", name="uq_users_email_org"),
@@ -78,8 +74,8 @@ def upgrade() -> None:
         sa.Column("source_type", sa.String(64), nullable=False, server_default="upload"),
         sa.Column("content_type", sa.String(128), nullable=True),
         sa.Column("storage_key", sa.String(1024), nullable=True),
-        sa.Column("status", sa.Enum("pending", "processing", "completed", "failed", "partial", name="ingestionstatus"), nullable=False, server_default="pending"),
-        sa.Column("detected_format", sa.Enum("apache_common", "apache_combined", "nginx", "json", "syslog", "custom", "unknown", name="logformat"), nullable=True),
+        sa.Column("status", postgresql.ENUM(*INGESTION_STATUS, name="ingestionstatus", create_type=False), nullable=False, server_default="pending"),
+        sa.Column("detected_format", postgresql.ENUM(*LOG_FORMAT, name="logformat", create_type=False), nullable=True),
         sa.Column("total_lines", sa.Integer, nullable=True),
         sa.Column("parsed_records", sa.Integer, nullable=True, server_default="0"),
         sa.Column("failed_records", sa.Integer, nullable=True, server_default="0"),
@@ -100,7 +96,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("timestamp", sa.DateTime(timezone=True), nullable=True),
         sa.Column("service_name", sa.String(256), nullable=True),
-        sa.Column("severity", sa.Enum("TRACE","DEBUG","INFO","WARN","WARNING","ERROR","CRITICAL","FATAL","UNKNOWN", name="severitylevel"), nullable=False, server_default="UNKNOWN"),
+        sa.Column("severity", postgresql.ENUM(*SEVERITY, name="severitylevel", create_type=False), nullable=False, server_default="UNKNOWN"),
         sa.Column("message", sa.Text, nullable=True),
         sa.Column("request_id", sa.String(256), nullable=True),
         sa.Column("trace_id", sa.String(256), nullable=True),
@@ -111,7 +107,7 @@ def upgrade() -> None:
         sa.Column("http_path", sa.String(2048), nullable=True),
         sa.Column("http_status", sa.Integer, nullable=True),
         sa.Column("duration_ms", sa.Float, nullable=True),
-        sa.Column("log_format", sa.Enum("apache_common","apache_combined","nginx","json","syslog","custom","unknown", name="logformat"), nullable=False, server_default="unknown"),
+        sa.Column("log_format", postgresql.ENUM(*LOG_FORMAT, name="logformat", create_type=False), nullable=False, server_default="unknown"),
         sa.Column("raw_line", sa.Text, nullable=True),
         sa.Column("extra_fields", postgresql.JSONB, nullable=True),
         sa.Column("pii_was_redacted", sa.Boolean, nullable=False, server_default="false"),
@@ -132,9 +128,10 @@ def upgrade() -> None:
     op.create_index("ix_log_records_request_id", "log_records", ["request_id"])
     op.create_index("ix_log_records_service_ts", "log_records", ["service_name", "timestamp"])
     op.execute("CREATE INDEX ix_log_records_message_tsv ON log_records USING gin(message_tsv)")
+    # Trigram index so regex (~*) keyword search stays under the 500ms target
+    op.execute("CREATE INDEX ix_log_records_message_trgm ON log_records USING gin(message gin_trgm_ops)")
 
-    # Vector index scaffolding (pgvector — activate when embeddings are generated)
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # Vector column + ANN index for semantic search
     op.execute("ALTER TABLE log_records ADD COLUMN IF NOT EXISTS embedding vector(1536)")
     op.execute("""
         CREATE INDEX ix_log_records_embedding_ivfflat
@@ -142,36 +139,12 @@ def upgrade() -> None:
         WITH (lists = 100)
     """)
 
-    # agent_actions
-    op.create_table(
-        "agent_actions",
-        sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("tool_name", sa.String(128), nullable=False),
-        sa.Column("trigger", sa.String(64), nullable=False),
-        sa.Column("autonomy_tier", sa.Enum("read_only","propose_only","autonomous", name="autonomytier"), nullable=False, server_default="autonomous"),
-        sa.Column("actor_user_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("confidence", sa.Float, nullable=True),
-        sa.Column("input_summary", sa.Text, nullable=True),
-        sa.Column("output_summary", sa.Text, nullable=True),
-        sa.Column("status", sa.String(32), nullable=False, server_default="completed"),
-        sa.Column("error", sa.Text, nullable=True),
-        sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=True),
-    )
-    op.create_index("ix_agent_actions_created_at", "agent_actions", ["created_at"])
-    op.create_index("ix_agent_actions_tool_name", "agent_actions", ["tool_name"])
-    op.create_index("ix_agent_actions_session_id", "agent_actions", ["session_id"])
-    op.create_index("ix_agent_actions_organization_id", "agent_actions", ["organization_id"])
-
 
 def downgrade() -> None:
-    op.drop_table("agent_actions")
     op.drop_table("log_records")
     op.drop_table("log_sessions")
     op.drop_table("users")
     op.execute("DROP TYPE IF EXISTS severitylevel")
     op.execute("DROP TYPE IF EXISTS logformat")
     op.execute("DROP TYPE IF EXISTS ingestionstatus")
-    op.execute("DROP TYPE IF EXISTS autonomytier")
     op.execute("DROP TYPE IF EXISTS userrole")

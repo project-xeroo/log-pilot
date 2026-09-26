@@ -34,6 +34,7 @@ from shared.models import (
     ServiceHealthState,
 )
 from shared.config import get_settings
+from shared.utils.feed import publish_feed_entry, record_feed_entry
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -331,25 +332,39 @@ async def detect_service_silence(
 
 # ── Agent Feed publisher ──────────────────────────────────────────────────────
 
-def _publish_anomaly_to_agent_feed(
+_ANOMALY_TITLES = {
+    "spike": "Error spike detected",
+    "new_error_type": "New error type detected",
+    "service_silence": "Service went silent",
+}
+
+
+async def _record_anomaly_in_agent_feed(
+    db: AsyncSession,
     service_name: str,
     anomaly_type: str,
     explanation: str,
     severity: str,
-) -> None:
-    """Publish natural-language anomaly explanation to Redis for the Agent Feed."""
+) -> dict | None:
+    """Record the natural-language anomaly explanation in the Agent Feed.
+
+    Returns the entry so the caller can push it live once the transaction commits.
+    """
     try:
-        import redis
-        r = redis.from_url(settings.redis_url)
-        r.publish("logpilot:agent_feed", json.dumps({
-            "type": "anomaly",
-            "service": service_name,
-            "anomaly_type": anomaly_type,
-            "explanation": explanation,
-            "severity": severity,
-        }))
+        # Savepoint: a feed failure must not abort the anomaly transaction
+        async with db.begin_nested():
+            return await record_feed_entry(
+                db,
+                entry_type="anomaly_detected",
+                title=f"{_ANOMALY_TITLES.get(anomaly_type, 'Anomaly detected')} in {service_name}",
+                body=explanation,
+                service_name=service_name,
+                severity=severity,
+                metadata={"anomaly_type": anomaly_type},
+            )
     except Exception as exc:
-        logger.debug("Failed to publish anomaly to agent feed: %s", exc)
+        logger.warning("Failed to record anomaly in agent feed: %s", exc)
+        return None
 
 
 # ── Orchestrator ──────────────────────────────────────────────────────────────
@@ -370,23 +385,27 @@ async def run_anomaly_detection(
         return {"error": "service not found"}
 
     detected: list[dict] = []
+    feed_entries: list[dict | None] = []
 
     spike = await detect_spike(db, service)
     if spike:
         detected.append({"type": "spike", "severity": spike.severity})
-        _publish_anomaly_to_agent_feed(service.name, "spike", spike.explanation, spike.severity)
+        feed_entries.append(await _record_anomaly_in_agent_feed(db, service.name, "spike", spike.explanation, spike.severity))
 
     new_errors = await detect_new_error_types(db, service)
     for ev in new_errors:
         detected.append({"type": "new_error_type", "severity": ev.severity})
-        _publish_anomaly_to_agent_feed(service.name, "new_error_type", ev.explanation, ev.severity)
+        feed_entries.append(await _record_anomaly_in_agent_feed(db, service.name, "new_error_type", ev.explanation, ev.severity))
 
     silence = await detect_service_silence(db, service)
     if silence:
         detected.append({"type": "service_silence", "severity": silence.severity})
-        _publish_anomaly_to_agent_feed(service.name, "service_silence", silence.explanation, silence.severity)
+        feed_entries.append(await _record_anomaly_in_agent_feed(db, service.name, "service_silence", silence.explanation, silence.severity))
 
     await db.commit()
+    for entry in feed_entries:
+        if entry:
+            publish_feed_entry(settings.redis_url, entry)
 
     logger.info("Anomaly detection: service=%s detected=%d", service.name, len(detected))
     return {"service": service.name, "anomalies_detected": len(detected), "details": detected}

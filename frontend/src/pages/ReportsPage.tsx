@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { listReports, generateReport } from "@/api";
-import { useAuthStore } from "@/store/auth";
+import { useAuthStore } from "@/store/authStore";
 import toast from "react-hot-toast";
 import { Plus, FileText, RefreshCw } from "lucide-react";
 import type { IncidentReport } from "@/types";
@@ -192,7 +192,7 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
 export default function ReportsPage() {
   const [showModal, setShowModal] = useState(false);
   const [page, setPage] = useState(1);
-  const { hasRole } = useAuthStore();
+  const can = useAuthStore((s) => s.can);
   const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
@@ -209,7 +209,7 @@ export default function ReportsPage() {
             Agent-drafted incident & pre-mortem reports
           </p>
         </div>
-        {hasRole("admin", "sre") && (
+        {can("report:create") && (
           <button
             onClick={() => setShowModal(true)}
             style={{
