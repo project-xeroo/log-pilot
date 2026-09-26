@@ -4,6 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "logpilot-api-gateway"
+<<<<<<< HEAD
 version = "0.1.0"
 description = "LogPilot API Gateway — RBAC-protected REST API"
 requires-python = ">=3.11"
@@ -24,3 +25,21 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27"]
+=======
+version = "1.0.0"
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "python-jose[cryptography]>=3.3",
+    "PyJWT>=2.8",
+    "redis[asyncio]>=5.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "websockets>=12.0",
+    "logpilot-shared",
+]
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0

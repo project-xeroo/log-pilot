@@ -1,9 +1,36 @@
 version: "3.9"
 
+<<<<<<< HEAD
 services:
   # ── Infrastructure ──────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
+=======
+# ── LogPilot — Phase: Proactive Failure Forecasting & Autonomy Model ─────────
+# All services + infrastructure in one compose file for local development.
+# For production, see infra/k8s/ (Kubernetes) or infra/terraform/ (cloud IaC).
+
+x-common-env: &common-env
+  DATABASE_URL: "postgresql+asyncpg://logpilot:logpilot@postgres:5432/logpilot"
+  REDIS_URL: "redis://redis:6379/0"
+  CELERY_BROKER_URL: "redis://redis:6379/0"
+  CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+  AI_PROVIDER: "stub"
+  AI_API_KEY: ""
+  AI_BASE_URL: ""
+  JWT_SECRET_KEY: "dev-secret-change-in-production"
+  ENVIRONMENT: "development"
+  FORECASTING_LOOP_INTERVAL_SECONDS: "60"
+  FORECASTING_WARNING_THRESHOLD: "60"
+  FORECASTING_CRITICAL_THRESHOLD: "80"
+
+services:
+
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+
+  postgres:
+    image: pgvector/pgvector:pg16
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
     environment:
       POSTGRES_USER: logpilot
       POSTGRES_PASSWORD: logpilot
@@ -28,7 +55,31 @@ services:
       timeout: 3s
       retries: 10
 
+<<<<<<< HEAD
   # ── Application services ────────────────────────────────────────────────
+=======
+  # ── Database migrations ────────────────────────────────────────────────────
+
+  migrate:
+    build:
+      context: .
+      dockerfile: services/forecasting-service/Dockerfile
+    command: >
+      sh -c "
+        until pg_isready -h postgres -U logpilot; do sleep 1; done;
+        alembic -c alembic.ini upgrade head
+      "
+    environment:
+      <<: *common-env
+      DATABASE_URL: "postgresql://logpilot:logpilot@postgres:5432/logpilot"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app/services/forecasting-service
+
+  # ── API Gateway ────────────────────────────────────────────────────────────
+
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
   api-gateway:
     build:
       context: .
@@ -36,6 +87,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+<<<<<<< HEAD
       DATABASE_URL: "postgresql+psycopg2://logpilot:logpilot@postgres:5432/logpilot"
       REDIS_URL: "redis://redis:6379/0"
       JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
@@ -43,20 +95,73 @@ services:
       FORECASTING_SERVICE_URL: "http://forecasting-service:8002"
       AUDIT_SERVICE_URL: "http://audit-service:8003"
       CORS_ORIGINS: '["http://localhost:5173","http://localhost:3000"]'
+=======
+      <<: *common-env
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+<<<<<<< HEAD
     volumes:
       - ./shared:/app/shared:ro
       - ./services/api-gateway/app:/app/app:ro
+=======
+      migrate:
+        condition: service_completed_successfully
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Forecasting Service (Celery worker + beat) ─────────────────────────────
+
+  forecasting-worker:
+    build:
+      context: .
+      dockerfile: services/forecasting-service/Dockerfile
+    command: celery -A app.loop.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+    working_dir: /app/services/forecasting-service
+
+  forecasting-beat:
+    build:
+      context: .
+      dockerfile: services/forecasting-service/Dockerfile
+    command: celery -A app.loop.celery_app beat --loglevel=info
+    environment:
+      <<: *common-env
+    depends_on:
+      forecasting-worker:
+        condition: service_started
+    volumes:
+      - .:/app
+    working_dir: /app/services/forecasting-service
+
+  # ── AI Service ─────────────────────────────────────────────────────────────
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
 
   ai-service:
     build:
       context: .
       dockerfile: services/ai-service/Dockerfile
     ports:
+<<<<<<< HEAD
       - "8001:8001"
     environment:
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
@@ -78,12 +183,45 @@ services:
     volumes:
       - ./shared:/app/shared:ro
       - ./services/forecasting-service/app:/app/app:ro
+=======
+      - "8002:8002"
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+    volumes:
+      - .:/app
+    working_dir: /app/services/ai-service
+
+  # ── Notification Service ───────────────────────────────────────────────────
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      <<: *common-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+    volumes:
+      - .:/app
+    working_dir: /app/services/notification-service
+
+  # ── Audit Service ──────────────────────────────────────────────────────────
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
 
   audit-service:
     build:
       context: .
       dockerfile: services/audit-service/Dockerfile
     ports:
+<<<<<<< HEAD
       - "8003:8003"
     volumes:
       - ./services/audit-service/app:/app/app:ro
@@ -100,6 +238,20 @@ services:
       - api-gateway
     volumes:
       - ./frontend/src:/app/src:ro
+=======
+      - "8004:8004"
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8004 --reload
+    volumes:
+      - .:/app
+    working_dir: /app/services/audit-service
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
 
 volumes:
   postgres_data:

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from __future__ import annotations
 
 import logging
@@ -39,3 +40,8 @@ def generate(body: GenerateRequest) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Report generation failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+=======
+from .generator import enrich_report_with_ai, approve_report, export_report_markdown, export_report_pdf
+
+__all__ = ["enrich_report_with_ai", "approve_report", "export_report_markdown", "export_report_pdf"]
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0

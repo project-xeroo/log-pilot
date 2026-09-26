@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from __future__ import annotations
 
 import logging
@@ -62,3 +63,10 @@ def get_weight(indicator_name: str, session: DBSession):
     if not fw:
         raise HTTPException(status_code=404, detail="Indicator not found")
     return WeightOut.model_validate(fw)
+=======
+from .celery_app import celery_app
+from .tasks import run_cycle_for_service
+from .autonomy import resolve_autonomy_tier, record_action
+
+__all__ = ["celery_app", "run_cycle_for_service", "resolve_autonomy_tier", "record_action"]
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0

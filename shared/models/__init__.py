@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from __future__ import annotations
 
 import enum
@@ -288,3 +289,27 @@ class DeploymentSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+=======
+"""Shared SQLAlchemy ORM models for LogPilot services."""
+from __future__ import annotations
+
+from .base import Base
+from .service import MonitoredService
+from .velocity import ErrorVelocityWindow
+from .snapshot import RiskSnapshot
+from .alert import PreIncidentAlert
+from .premortem import PreMortemReport
+from .autonomy import AutonomyPolicy
+from .audit import AgentAction
+
+__all__ = [
+    "Base",
+    "MonitoredService",
+    "ErrorVelocityWindow",
+    "RiskSnapshot",
+    "PreIncidentAlert",
+    "PreMortemReport",
+    "AutonomyPolicy",
+    "AgentAction",
+]
+>>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
