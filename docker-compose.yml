@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: logpilot
+      POSTGRES_PASSWORD: logpilot
+      POSTGRES_DB: logpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Application services ────────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://logpilot:logpilot@postgres:5432/logpilot"
+      REDIS_URL: "redis://redis:6379/0"
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+      AI_SERVICE_URL: "http://ai-service:8001"
+      FORECASTING_SERVICE_URL: "http://forecasting-service:8002"
+      AUDIT_SERVICE_URL: "http://audit-service:8003"
+      CORS_ORIGINS: '["http://localhost:5173","http://localhost:3000"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./shared:/app/shared:ro
+      - ./services/api-gateway/app:/app/app:ro
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o}"
+    volumes:
+      - ./services/ai-service/app:/app/app:ro
+
+  forecasting-service:
+    build:
+      context: .
+      dockerfile: services/forecasting-service/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://logpilot:logpilot@postgres:5432/logpilot"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./shared:/app/shared:ro
+      - ./services/forecasting-service/app:/app/app:ro
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: services/audit-service/Dockerfile
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./services/audit-service/app:/app/app:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: "http://localhost:8000"
+    depends_on:
+      - api-gateway
+    volumes:
+      - ./frontend/src:/app/src:ro
+
+volumes:
+  postgres_data:

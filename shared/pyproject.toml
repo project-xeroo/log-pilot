@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "logpilot-shared"
+version = "0.1.0"
+description = "Shared models, schemas, and utilities for LogPilot services"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg2-binary>=2.9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["models", "utils", "config"]

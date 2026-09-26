@@ -1,0 +1,17 @@
+version: "3.9"
+
+# Override for local development — hot-reload on source changes
+services:
+  api-gateway:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      JWT_SECRET: "dev-secret-do-not-use-in-prod"
+
+  ai-service:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  forecasting-service:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+
+  audit-service:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
