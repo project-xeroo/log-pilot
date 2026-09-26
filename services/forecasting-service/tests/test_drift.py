@@ -4,8 +4,12 @@ Tests the pure _cosine_similarity helper — no DB required.
 """
 
 import math
+import sys
+import os
 import pytest
-from services.forecasting_service.app.drift.detector import _cosine_similarity
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from app.drift.detector import _cosine_similarity
 
 
 class TestCosineSimilarity:

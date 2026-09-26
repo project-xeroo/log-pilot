@@ -1,34 +1,10 @@
-<<<<<<< HEAD
-from __future__ import annotations
-
-from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
-=======
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-<<<<<<< HEAD
-    # Database
-    database_url: str = "postgresql+psycopg2://logpilot:logpilot@localhost:5432/logpilot"
-
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
-
-    # JWT
-    jwt_secret: str = "change-me-in-production"
-    jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 60
-
-    # Service URLs (inter-service calls)
-    ai_service_url: str = "http://ai-service:8001"
-    forecasting_service_url: str = "http://forecasting-service:8002"
-    audit_service_url: str = "http://audit-service:8003"
-=======
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = "postgresql+asyncpg://logpilot:logpilot@localhost:5432/logpilot"
     database_pool_size: int = 10
@@ -70,8 +46,18 @@ class Settings(BaseSettings):
     service_name: str = "logpilot"
     environment: str = "development"
 
+    # ── Analysis layer (Phase 3) ──────────────────────────────────────────────
+    # Deduplication
+    dedup_similarity_threshold: float = 0.85   # cosine similarity threshold
+
+    # Clustering
+    clustering_min_samples: int = 2            # DBSCAN min_samples
+    clustering_eps: float = 0.25              # DBSCAN eps in cosine space
+
+    # Anomaly detection
+    anomaly_zscore_threshold: float = 3.0     # z-score above baseline = anomaly
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0

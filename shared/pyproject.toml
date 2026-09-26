@@ -4,21 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "logpilot-shared"
-version = "0.1.0"
-<<<<<<< HEAD
-description = "Shared models, schemas, and utilities for LogPilot services"
-requires-python = ">=3.11"
-dependencies = [
-    "pydantic>=2.6",
-    "pydantic-settings>=2.2",
-    "sqlalchemy>=2.0",
-    "alembic>=1.13",
-    "psycopg2-binary>=2.9",
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["models", "utils", "config"]
-=======
+version = "1.0.0"
 description = "Shared models, config, and utilities for LogPilot microservices"
 requires-python = ">=3.11"
 
@@ -39,4 +25,3 @@ packages = ["shared"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0

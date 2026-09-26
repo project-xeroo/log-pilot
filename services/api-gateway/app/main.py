@@ -1,13 +1,9 @@
-<<<<<<< HEAD
-from __future__ import annotations
-
-import logging
-=======
 """
 API Gateway — main FastAPI application.
 
 Mounts:
   /forecasting  — forecasting router (risk, alerts, approvals, pre-mortems, policy)
+  /analysis     — Phase 3 analysis router (dedup, clusters, health, rca, anomalies, deployment comparison)
   /audit        — audit router (agent_actions log)
   /ws/alerts    — WebSocket real-time alert stream
   /auth/token   — issue JWT tokens (dev/test helper)
@@ -18,32 +14,12 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-<<<<<<< HEAD
-from app.config import settings
-from app.middleware import RequestLoggingMiddleware
-from app.routers import (
-    auth_router,
-    deployments_router,
-    feedback_router,
-    outcomes_router,
-    reports_router,
-    users_router,
-)
-from shared.utils import init_db
-
-logging.basicConfig(level=logging.INFO)
-
-app = FastAPI(
-    title="LogPilot API Gateway",
-    version="0.5.0",
-    description="RBAC-protected gateway for LogPilot — Phase 5",
-=======
 from app.routers.forecasting import router as forecasting_router
+from app.routers.analysis import router as analysis_router
 from app.websocket.alerts_ws import ws_endpoint, redis_broadcast_listener
 from shared.config import get_settings
 
@@ -63,45 +39,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="LogPilot API Gateway",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
 )
 
 app.add_middleware(
     CORSMiddleware,
-<<<<<<< HEAD
-    allow_origins=settings.cors_origins,
-=======
     allow_origins=["*"],   # tighten in production
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-<<<<<<< HEAD
-app.add_middleware(RequestLoggingMiddleware)
-
-app.include_router(auth_router)
-app.include_router(users_router)
-app.include_router(reports_router)
-app.include_router(outcomes_router)
-app.include_router(deployments_router)
-app.include_router(feedback_router)
-
-
-@app.on_event("startup")
-def on_startup():
-    init_db()
-
-
-@app.get("/healthz")
-def health():
-=======
 
 app.include_router(forecasting_router)
+app.include_router(analysis_router)
 
 # Import audit router from audit-service directly (same process in monorepo dev mode)
 try:
@@ -143,5 +96,4 @@ app.include_router(_auth_router)
 
 @app.get("/health")
 async def health():
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
     return {"status": "ok", "service": "api-gateway"}

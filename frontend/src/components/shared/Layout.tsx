@@ -8,6 +8,7 @@ import {
   Users,
   LogOut,
   AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 
 interface NavItem {
@@ -18,6 +19,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { label: "Risk Board", to: "/risk-board", icon: <ShieldAlert size={16} /> },
   { label: "Reports", to: "/reports", icon: <FileText size={16} /> },
   { label: "Deployments", to: "/deployments", icon: <GitCompare size={16} /> },
   { label: "Forecast Weights", to: "/weights", icon: <BarChart2 size={16} /> },

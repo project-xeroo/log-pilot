@@ -7,6 +7,7 @@ import ReportDetailPage from "@/pages/ReportDetailPage";
 import DeploymentsPage from "@/pages/DeploymentsPage";
 import WeightsPage from "@/pages/WeightsPage";
 import UsersPage from "@/pages/UsersPage";
+import RiskBoardPage from "@/pages/RiskBoardPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import ForbiddenPage from "@/pages/ForbiddenPage";
 
@@ -24,7 +25,7 @@ export default function App() {
           element={
             <RoleGuard>
               <Layout>
-                <Navigate to="/reports" replace />
+                <Navigate to="/risk-board" replace />
               </Layout>
             </RoleGuard>
           }
@@ -69,6 +70,17 @@ export default function App() {
             <RoleGuard>
               <Layout>
                 <WeightsPage />
+              </Layout>
+            </RoleGuard>
+          }
+        />
+
+        <Route
+          path="/risk-board"
+          element={
+            <RoleGuard>
+              <Layout>
+                <RiskBoardPage />
               </Layout>
             </RoleGuard>
           }

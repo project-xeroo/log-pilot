@@ -3,8 +3,11 @@ Unit tests for velocity derivative calculation.
 Tests the pure helper functions — no DB required.
 """
 
+import sys, os
 import pytest
-from services.forecasting_service.app.velocity.tracker import (
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from app.velocity.tracker import (
     _compute_derivatives,
     _normalise_velocity_score,
 )

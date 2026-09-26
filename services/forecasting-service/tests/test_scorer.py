@@ -3,8 +3,11 @@ Unit tests for the weighted risk scorer.
 No DB required — pure function tests.
 """
 
+import sys, os
 import pytest
-from services.forecasting_service.app.scoring.scorer import compute_risk_score, RiskResult
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from app.scoring.scorer import compute_risk_score, RiskResult
 
 
 class TestComputeRiskScore:
