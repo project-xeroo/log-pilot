@@ -8,6 +8,14 @@ import type {
   PaginatedResponse,
   TokenResponse,
   User,
+  // Phase 3
+  FleetHealth,
+  ServiceHealthState,
+  DedupError,
+  ErrorCluster,
+  AnomalyEvent,
+  DeploymentRegression,
+  RCAResult,
 } from "@/types";
 
 // ── Auth ──────────────────────────────────────────────────────────────────
@@ -142,5 +150,94 @@ export async function updateUser(
   patch: { role?: User["role"]; is_active?: boolean; full_name?: string }
 ): Promise<User> {
   const { data } = await api.patch<User>(`/users/${id}`, patch);
+  return data;
+}
+
+// ── Phase 3: Analysis & Correlation Layer ─────────────────────────────────
+
+/** Fleet health summary — all active services. */
+export async function getFleetHealth(): Promise<FleetHealth> {
+  const { data } = await api.get<FleetHealth>("/analysis/health");
+  return data;
+}
+
+/** Single service health state. */
+export async function getServiceHealth(serviceId: string): Promise<ServiceHealthState> {
+  const { data } = await api.get<ServiceHealthState>(`/analysis/health/${serviceId}`);
+  return data;
+}
+
+/** Deduplicated errors for a service. */
+export async function listDedupErrors(
+  serviceId: string,
+  params?: { limit?: number; severity?: string }
+): Promise<DedupError[]> {
+  const { data } = await api.get<DedupError[]>(`/analysis/dedup/${serviceId}`, { params });
+  return data;
+}
+
+/** Error clusters for a service. */
+export async function listClusters(
+  serviceId: string,
+  params?: { active_only?: boolean; limit?: number }
+): Promise<ErrorCluster[]> {
+  const { data } = await api.get<ErrorCluster[]>(`/analysis/clusters/${serviceId}`, { params });
+  return data;
+}
+
+/** List anomaly events. */
+export async function listAnomalies(params?: {
+  service_id?: string;
+  resolved?: boolean;
+  limit?: number;
+}): Promise<AnomalyEvent[]> {
+  const { data } = await api.get<AnomalyEvent[]>("/analysis/anomalies", { params });
+  return data;
+}
+
+/** Resolve an anomaly. */
+export async function resolveAnomaly(anomalyId: string, resolved_by: string): Promise<AnomalyEvent> {
+  const { data } = await api.post<AnomalyEvent>(`/analysis/anomalies/${anomalyId}/resolve`, { resolved_by });
+  return data;
+}
+
+/** Run RCA for a service. */
+export async function runRCA(serviceId: string, window_minutes = 30): Promise<RCAResult> {
+  const { data } = await api.post<RCAResult>(`/analysis/rca/${serviceId}`, { window_minutes });
+  return data;
+}
+
+/** List deployment regressions. */
+export async function listRegressions(params?: {
+  service_id?: string;
+  acknowledged?: boolean;
+  limit?: number;
+}): Promise<DeploymentRegression[]> {
+  const { data } = await api.get<DeploymentRegression[]>("/analysis/regressions", { params });
+  return data;
+}
+
+/** Acknowledge a regression. */
+export async function acknowledgeRegression(
+  regressionId: string,
+  acknowledged_by: string
+): Promise<DeploymentRegression> {
+  const { data } = await api.post<DeploymentRegression>(
+    `/analysis/regressions/${regressionId}/acknowledge`,
+    { acknowledged_by }
+  );
+  return data;
+}
+
+/** Manual deployment comparison. */
+export async function compareDeploymentVersions(params: {
+  service_id: string;
+  baseline_version: string;
+  head_version: string;
+  baseline_deployed_at?: string;
+  head_deployed_at?: string;
+  window_hours?: number;
+}): Promise<DeploymentRegression[]> {
+  const { data } = await api.post<DeploymentRegression[]>("/analysis/compare", params);
   return data;
 }

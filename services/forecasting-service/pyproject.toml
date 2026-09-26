@@ -3,25 +3,6 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-<<<<<<< HEAD
-name = "logpilot-forecasting-service"
-version = "0.1.0"
-description = "LogPilot Forecasting Service — leading-indicator scoring and feedback loop"
-requires-python = ">=3.11"
-dependencies = [
-    "fastapi>=0.111",
-    "uvicorn[standard]>=0.29",
-    "pydantic>=2.6",
-    "pydantic-settings>=2.2",
-    "sqlalchemy>=2.0",
-    "alembic>=1.13",
-    "psycopg2-binary>=2.9",
-    "logpilot-shared @ file://../../../shared",
-]
-
-[project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23"]
-=======
 name = "logpilot-forecasting"
 version = "1.0.0"
 requires-python = ">=3.11"
@@ -39,4 +20,16 @@ dependencies = [
     "pydantic-settings>=2.0",
     "logpilot-shared",
 ]
->>>>>>> e364a7a0c05430efb740325dea92835d994c1bc0
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

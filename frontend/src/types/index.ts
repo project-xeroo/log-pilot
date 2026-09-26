@@ -1,4 +1,4 @@
-// Shared TypeScript types for LogPilot Phase 5
+// Shared TypeScript types for LogPilot — Phase 5 + Phase 3 Analysis Layer
 
 export type Role = "admin" | "developer" | "sre" | "viewer";
 
@@ -102,4 +102,122 @@ export interface TokenResponse {
   role: Role;
   user_id: string;
   email: string;
+}
+
+// ── Phase 3: Analysis & Correlation Layer ─────────────────────────────────
+
+export interface ServiceHealthState {
+  service_id: string;
+  service_name: string | null;
+  health_score: number;
+  baseline_error_rate: number;
+  current_error_rate: number;
+  baseline_deviation_z: number;
+  active_cluster_count: number;
+  total_deduped_error_count: number;
+  open_anomaly_count: number;
+  top_cluster_label: string | null;
+  latest_risk_tier: "normal" | "warning" | "critical";
+  latest_risk_score: number;
+  evaluated_at: string;
+}
+
+export interface FleetHealth {
+  total_services: number;
+  healthy_count: number;
+  warning_count: number;
+  critical_count: number;
+  total_open_anomalies: number;
+  total_active_clusters: number;
+  most_at_risk_service: string | null;
+  evaluated_at: string;
+  services: ServiceHealthState[];
+}
+
+export interface DedupError {
+  id: string;
+  service_id: string;
+  fingerprint: string;
+  canonical_message: string;
+  severity: string;
+  occurrence_count: number;
+  first_seen: string;
+  last_seen: string;
+  cluster_id: string | null;
+}
+
+export interface ErrorCluster {
+  id: string;
+  service_id: string;
+  cluster_label: number;
+  auto_label: string | null;
+  confidence_score: number;
+  member_count: number;
+  is_active: boolean;
+  first_seen: string;
+  last_seen: string;
+}
+
+export type AnomalyType =
+  | "spike"
+  | "new_error_type"
+  | "service_silence"
+  | "cluster_drift";
+
+export interface AnomalyEvent {
+  id: string;
+  service_id: string;
+  cluster_id: string | null;
+  anomaly_type: AnomalyType;
+  explanation: string;
+  z_score: number | null;
+  observed_value: number | null;
+  baseline_mean: number | null;
+  baseline_std: number | null;
+  severity: "warning" | "critical";
+  detected_at: string;
+  resolved_at: string | null;
+  is_resolved: boolean;
+  context: Record<string, unknown> | null;
+}
+
+export interface DeploymentRegression {
+  id: string;
+  service_id: string;
+  baseline_version: string;
+  head_version: string;
+  regression_type: string;
+  explanation: string;
+  baseline_error_rate: number | null;
+  head_error_rate: number | null;
+  error_rate_delta: number | null;
+  cluster_id: string | null;
+  confidence: number | null;
+  detected_at: string;
+  acknowledged: boolean;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
+}
+
+export interface CausalStep {
+  order: number;
+  service: string;
+  event_type: string;
+  timestamp: string;
+  description: string;
+  supporting_log_ids: string[];
+  confidence: number;
+}
+
+export interface RCAResult {
+  service_name: string;
+  window_start: string;
+  window_end: string;
+  root_cause_summary: string;
+  causal_chain: CausalStep[];
+  affected_services: string[];
+  confidence_score: number;
+  ai_model: string;
+  duration_ms: number;
+  supporting_evidence: Record<string, unknown>[];
 }
